@@ -101,7 +101,7 @@ LTU_pbp <- lapply(match_pick$state, function(s) {
   get_match_pbp(s)
 }) %>% bind_rows()
 LTU_pbp <- LTU_pbp %>%
-   left_join(match_pick %>% select(fixtureId, round, startTimeLocal), by = "fixtureId")
+  left_join(match_pick %>% select(fixtureId, round, startTimeLocal), by = "fixtureId")
 
 
 ## ------------------------------------------------------------
@@ -114,6 +114,7 @@ LTU_pbp <- LTU_pbp %>%
 build_player_lookup <- function(pbp_df) {
   pbp_df %>%
     filter(!is.na(personId), !is.na(player)) %>%
+    mutate(personId = as.character(personId)) %>%
     group_by(personId) %>%
     summarise(player_name = first(player), .groups = "drop")
 }
@@ -131,11 +132,15 @@ get_starting_lineup <- function(period_df, team_name) {
     filter(action == "substitution") %>%
     slice(1)
   if (nrow(first_sub_row) > 0) {
-    pre_sub <- team_events %>% slice(1:(first_sub_row$row_num - 1))
+    if (first_sub_row$row_num > 1) {
+      pre_sub <- team_events %>% slice(seq_len(first_sub_row$row_num - 1))
+    } else {
+      pre_sub <- team_events %>% slice(0)
+    }
   } else {
     pre_sub <- team_events
   }
-  starters <- unique(pre_sub$personId)
+  starters <- unique(as.character(pre_sub$personId))
   starters <- starters[!is.na(starters)]
   starters <- head(starters, 5)
   if (length(starters) != 5) {
@@ -161,11 +166,15 @@ validate_period_start <- function(period_df, team_name, carried_lineup, fid, per
     filter(action == "substitution") %>%
     slice(1)
   pre_sub <- if (nrow(first_sub_row) > 0) {
-    team_events %>% slice(1:(first_sub_row$row_num - 1))
+    if (first_sub_row$row_num > 1) {
+      team_events %>% slice(seq_len(first_sub_row$row_num - 1))
+    } else {
+      team_events %>% slice(0)
+    }
   } else {
     team_events
   }
-  actors <- unique(pre_sub$personId)
+  actors <- unique(as.character(pre_sub$personId))
   actors <- actors[!is.na(actors)]
   unexpected <- setdiff(actors, carried_lineup)
   if (length(unexpected) > 0) {
@@ -286,8 +295,9 @@ build_stints <- function(pbp_df, period_length = PERIOD_LENGTH_SECONDS, half_bou
         for (k in same_time_idx) {
           r <- game_df[k, ]
           tm <- r$team
-          if (r$detail == "out") { lineup[[tm]] <- setdiff(lineup[[tm]], r$personId) }
-          else if (r$detail == "in") { lineup[[tm]] <- union(lineup[[tm]], r$personId) }
+          pid <- as.character(r$personId)
+          if (r$detail == "out") { lineup[[tm]] <- setdiff(lineup[[tm]], pid) }
+          else if (r$detail == "in") { lineup[[tm]] <- union(lineup[[tm]], pid) }
         }
         
         points <- setNames(c(0, 0), c(team_a, team_b))
@@ -316,8 +326,10 @@ build_stints <- function(pbp_df, period_length = PERIOD_LENGTH_SECONDS, half_bou
 ## ------------------------------------------------------------
 ## 3. Naive pair performance (keyed on personId, joined to names at the end)
 ## ------------------------------------------------------------
-naive_pair_synergy <- function(stints_df, team_name, player_lookup) {
-  team_stints <- stints_df %>% filter(team == team_name)
+naive_pair_synergy <- function(stints_df, team_name, player_lookup,
+                               min_duration_sec = 15) {
+  team_stints <- stints_df %>%
+    filter(team == team_name, duration_sec >= min_duration_sec)
   pair_rows <- team_stints %>%
     mutate(stint_id = row_number()) %>%
     mutate(pairs = map(lineup, ~ combn(.x, 2, simplify = FALSE))) %>%
@@ -354,80 +366,292 @@ naive_pair_synergy <- function(stints_df, team_name, player_lookup) {
 ## ------------------------------------------------------------
 ## 4. RAPM-style ridge regression, fold-by-game CV, personId-keyed
 ## ------------------------------------------------------------
-build_player_design_matrix <- function(stints_df, team_name, min_duration_sec = 15) {
-  team_stints <- stints_df %>%
-    filter(team == team_name, duration_sec >= min_duration_sec) %>%
-    mutate(stint_id = row_number())
+build_player_design_matrix <- function(
+    stints_df,
+    team_name,
+    min_duration_sec = 15
+) {
   
-  all_players <- team_stints$lineup %>% unlist(use.names = FALSE) %>% unique() %>% sort()
+  team_stints <- stints_df %>%
+    filter(
+      team == team_name,
+      duration_sec >= min_duration_sec
+    ) %>%
+    mutate(
+      lineup = map(
+        lineup,
+        ~ as.character(.x[
+          !is.na(.x) & nzchar(as.character(.x))
+        ])
+      ),
+      stint_id = row_number()
+    )
+  
+  # Collect all valid player IDs
+  all_players <- team_stints$lineup %>%
+    unlist(use.names = FALSE) %>%
+    as.character()
+  
+  all_players <- sort(unique(
+    all_players[
+      !is.na(all_players) &
+        nzchar(all_players)
+    ]
+  ))
   
   player_matrix <- matrix(
-    0, nrow = nrow(team_stints), ncol = length(all_players),
+    0,
+    nrow = nrow(team_stints),
+    ncol = length(all_players),
     dimnames = list(NULL, all_players)
   )
+  
   for (i in seq_len(nrow(team_stints))) {
-    players_on <- team_stints$lineup[[i]]
-    player_matrix[i, players_on] <- 1
+    
+    players_on <- as.character(
+      team_stints$lineup[[i]]
+    )
+    
+    players_on <- players_on[
+      !is.na(players_on) &
+        nzchar(players_on)
+    ]
+    
+    # Match player IDs to matrix-column positions
+    player_positions <- match(
+      players_on,
+      all_players
+    )
+    
+    if (anyNA(player_positions)) {
+      warning(
+        "Unmatched player ID in stint ",
+        i,
+        ": ",
+        paste(
+          players_on[is.na(player_positions)],
+          collapse = ", "
+        )
+      )
+      
+      player_positions <- player_positions[
+        !is.na(player_positions)
+      ]
+    }
+    
+    if (length(player_positions) > 0) {
+      player_matrix[i, player_positions] <- 1
+    }
   }
   
-  opp_dummies <- model.matrix(~ opponent - 1, data = team_stints)
-  X <- cbind(player_matrix, opp_dummies)
-  y <- (team_stints$team_points - team_stints$opp_points) / (team_stints$duration_sec / 60)
+  # Opponent-team controls
+  opp_dummies <- model.matrix(
+    ~ opponent - 1,
+    data = team_stints
+  )
+  
+  X <- cbind(
+    player_matrix,
+    opp_dummies
+  )
+  
+  y <- (
+    team_stints$team_points -
+      team_stints$opp_points
+  ) / (team_stints$duration_sec / 60)
+  
   w <- team_stints$duration_sec
   
-  list(X = X, y = y, w = w, players = all_players, stints = team_stints)
+  list(
+    X = X,
+    y = y,
+    w = w,
+    players = all_players,
+    stints = team_stints
+  )
 }
 
-#' Ridge regression with folds assigned BY GAME (fixtureId), not
-#' randomly across stints — stints from the same game are correlated,
-#' so random folding leaks information between train/validation sets.
-#' With 10 games this is approximately leave-one-game-out CV.
-fit_rapm <- function(stints_df, team_name, player_lookup) {
-  dm <- build_player_design_matrix(stints_df, team_name)
+fit_rapm_model <- function(
+    stints_df,
+    team_name,
+    player_lookup,
+    lambda_choice = "lambda.1se"
+) {
+  
+  dm <- build_player_design_matrix(
+    stints_df,
+    team_name
+  )
+  
   if (nrow(dm$X) < 15) {
-    cat("WARNING:", team_name, "has only", nrow(dm$X),
-        "stints after filtering - ridge regression will be unstable.\n")
+    warning(
+      team_name,
+      " has only ",
+      nrow(dm$X),
+      " stints after filtering."
+    )
   }
   
   game_ids <- unique(dm$stints$fixtureId)
-  fold_lookup <- setNames(seq_along(game_ids), game_ids)
-  fold_id <- unname(fold_lookup[dm$stints$fixtureId])
   
-  cvfit <- cv.glmnet(dm$X, dm$y, alpha = 0, weights = dm$w, foldid = fold_id)
-  coefs <- coef(cvfit, s = "lambda.min")
-  player_coefs <- coefs[dm$players, 1]
+  if (length(game_ids) < 3) {
+    stop(
+      "At least 3 games are required for game-level cross-validation."
+    )
+  }
   
-  tibble(personId = dm$players, rapm_rating = as.numeric(player_coefs)) %>%
-    left_join(player_lookup, by = "personId") %>%
-    select(player_name, personId, rapm_rating) %>%
+  # Keep every game entirely within one CV fold
+  fold_lookup <- setNames(
+    seq_along(game_ids),
+    game_ids
+  )
+  
+  fold_id <- unname(
+    fold_lookup[dm$stints$fixtureId]
+  )
+  
+  set.seed(123)
+  
+  cvfit <- cv.glmnet(
+    x = dm$X,
+    y = dm$y,
+    alpha = 0,
+    weights = dm$w,
+    foldid = fold_id
+  )
+  
+  coefficients <- coef(
+    cvfit,
+    s = lambda_choice
+  )
+  
+  # Keep full precision
+  player_coefficients <- as.numeric(
+    coefficients[dm$players, 1]
+  )
+  
+  # Prediction based on all five LTU players
+  # and the opponent-team control
+  predicted <- as.numeric(
+    predict(
+      cvfit,
+      newx = dm$X,
+      s = lambda_choice
+    )
+  )
+  
+  stint_predictions <- dm$stints %>%
+    mutate(
+      actual_net_per_minute = dm$y,
+      
+      predicted_net_per_minute =
+        predicted,
+      
+      stint_residual =
+        actual_net_per_minute -
+        predicted_net_per_minute
+    )
+  
+  player_effects <- tibble(
+    personId = dm$players,
+    rapm_rating = player_coefficients
+  ) %>%
+    left_join(
+      player_lookup,
+      by = "personId"
+    ) %>%
+    select(
+      player_name,
+      personId,
+      rapm_rating
+    ) %>%
     arrange(desc(rapm_rating))
+  
+  list(
+    player_effects = player_effects,
+    stint_predictions = stint_predictions,
+    cvfit = cvfit,
+    lambda_choice = lambda_choice,
+    lambda_used = if (
+      lambda_choice == "lambda.1se"
+    ) {
+      cvfit$lambda.1se
+    } else {
+      cvfit$lambda.min
+    }
+  )
+}
+
+fit_rapm <- function(stints_df, team_name, player_lookup,
+                     lambda_choice = "lambda.1se") {
+  fit_rapm_model(
+    stints_df, team_name, player_lookup, lambda_choice
+  )$player_effects
 }
 
 
 ## ------------------------------------------------------------
-## 5. PRIMARY OUTPUT: sequential connection score
+## 5. PRIMARY OUTPUT: complete-lineup residual connection score
 ## ------------------------------------------------------------
-#' Reviewer-recommended primary measure. Actual pair net rating minus
-#' the sum of each player's individual RAPM rating = connection_score.
-#' Framed explicitly as an association, not causal proof of chemistry.
-#' min_minutes raised to 15 per reviewer guidance (was 5) — a pair
-#' surviving a handful of possessions is not a reliable signal.
-compute_connection_scores <- function(stints_df, team_name, player_lookup, min_minutes = 15) {
-  pairs <- naive_pair_synergy(stints_df, team_name, player_lookup) %>%
-    filter(minutes_together >= min_minutes), n_games_together >= 2)
-  ratings <- fit_rapm(stints_df, team_name, player_lookup)
-  rating_lookup <- setNames(ratings$rapm_rating, ratings$personId)
+#' Duration-weighted mean RAPM residual for stints in which both
+#' players appeared. Positive means LTU performed above the full-lineup
+#' prediction; negative means below prediction. This is an association,
+#' not causal proof of chemistry.
+compute_connection_scores <- function(stints_df, team_name, player_lookup,
+                                      min_minutes = 15, min_games = 2,
+                                      lambda_choice = "lambda.1se") {
+  model <- fit_rapm_model(
+    stints_df, team_name, player_lookup, lambda_choice
+  )
   
-  pairs %>%
+  pair_residuals <- model$stint_predictions %>%
     mutate(
-      rating_1 = rating_lookup[id_1],
-      rating_2 = rating_lookup[id_2],
-      expected_net_per_minute = rating_1 + rating_2,
-      connection_score = net_per_minute - expected_net_per_minute
+      pairs = map(
+        lineup,
+        ~ combn(as.character(.x), 2, simplify = FALSE)
+      )
     ) %>%
-    select(player_1, player_2, minutes_together, n_games_together,
-           net_per_minute, expected_net_per_minute, connection_score) %>%
+    select(
+      fixtureId, duration_sec, actual_net_per_minute,
+      predicted_net_per_minute, stint_residual, pairs
+    ) %>%
+    unnest(pairs) %>%
+    mutate(
+      id_1 = map_chr(pairs, 1),
+      id_2 = map_chr(pairs, 2)
+    ) %>%
+    group_by(id_1, id_2) %>%
+    summarise(
+      minutes_together = sum(duration_sec) / 60,
+      n_games_together = n_distinct(fixtureId),
+      net_per_minute = weighted.mean(
+        actual_net_per_minute, duration_sec, na.rm = TRUE
+      ),
+      expected_net_per_minute = weighted.mean(
+        predicted_net_per_minute, duration_sec, na.rm = TRUE
+      ),
+      connection_score = weighted.mean(
+        stint_residual, duration_sec, na.rm = TRUE
+      ),
+      .groups = "drop"
+    ) %>%
+    filter(
+      minutes_together >= min_minutes,
+      n_games_together >= min_games
+    ) %>%
+    left_join(player_lookup, by = c("id_1" = "personId")) %>%
+    rename(player_1 = player_name) %>%
+    left_join(player_lookup, by = c("id_2" = "personId")) %>%
+    rename(player_2 = player_name) %>%
+    select(
+      player_1, player_2, id_1, id_2,
+      minutes_together, n_games_together,
+      net_per_minute, expected_net_per_minute, connection_score
+    ) %>%
     arrange(desc(connection_score))
+  
+  attr(pair_residuals, "rapm_model") <- model
+  pair_residuals
 }
 
 
@@ -457,6 +681,143 @@ exclude_broken_games <- function(stints_df, team_name, min_pct = 0.5) {
 }
 
 
+## ------------------------------------------------------------
+## 6. RECONSTRUCTION QUALITY CHECKS
+## ------------------------------------------------------------
+validate_reconstruction <- function(stints_df, pbp_df, team_name,
+                                    expected_periods = 4,
+                                    period_length = 600) {
+  retained_games <- stints_df %>%
+    filter(team == team_name) %>%
+    distinct(fixtureId)
+  
+  reconstructed <- stints_df %>%
+    filter(team == team_name) %>%
+    group_by(fixtureId) %>%
+    summarise(
+      reconstructed_team_points = sum(team_points),
+      reconstructed_opp_points = sum(opp_points),
+      reconstructed_minutes = sum(duration_sec) / 60,
+      negative_duration = sum(duration_sec < 0),
+      zero_duration = sum(duration_sec == 0),
+      incomplete_lineup = sum(map_int(lineup, length) != 5),
+      .groups = "drop"
+    )
+  
+  pbp_scores <- pbp_df %>%
+    semi_join(retained_games, by = "fixtureId") %>%
+    filter(
+      action %in% names(SCORE_POINTS),
+      !is.na(success), success
+    ) %>%
+    mutate(event_points = unname(SCORE_POINTS[action])) %>%
+    group_by(fixtureId) %>%
+    summarise(
+      pbp_team_points = sum(event_points[team == team_name], na.rm = TRUE),
+      pbp_opp_points = sum(event_points[team != team_name], na.rm = TRUE),
+      .groups = "drop"
+    )
+  
+  reconstructed %>%
+    left_join(pbp_scores, by = "fixtureId") %>%
+    mutate(
+      expected_minutes = expected_periods * period_length / 60,
+      coverage = reconstructed_minutes / expected_minutes,
+      team_score_difference = reconstructed_team_points - pbp_team_points,
+      opp_score_difference = reconstructed_opp_points - pbp_opp_points,
+      score_check = if_else(
+        team_score_difference == 0 & opp_score_difference == 0,
+        "Match", "Investigate"
+      )
+    ) %>%
+    arrange(coverage)
+}
+
+
+## ------------------------------------------------------------
+## 7. LEAVE-ONE-GAME-OUT STABILITY
+## ------------------------------------------------------------
+leave_one_game_out_stability <- function(stints_df, team_name,
+                                         player_lookup,
+                                         min_minutes = 15,
+                                         min_games = 2,
+                                         lambda_choice = "lambda.1se") {
+  game_ids <- unique(
+    stints_df$fixtureId[stints_df$team == team_name]
+  )
+  
+  loo_scores <- map_dfr(game_ids, function(game_left_out) {
+    training_stints <- stints_df %>%
+      filter(fixtureId != game_left_out)
+    
+    tryCatch(
+      compute_connection_scores(
+        training_stints,
+        team_name,
+        player_lookup,
+        min_minutes = min_minutes,
+        min_games = min_games,
+        lambda_choice = lambda_choice
+      ) %>%
+        transmute(
+          game_left_out,
+          id_1, id_2,
+          loo_connection_score = connection_score
+        ),
+      error = function(e) {
+        warning("LOO model failed for fixture ", game_left_out,
+                ": ", conditionMessage(e))
+        tibble()
+      }
+    )
+  })
+  
+  loo_scores %>%
+    group_by(id_1, id_2) %>%
+    summarise(
+      n_loo_estimates = n(),
+      mean_loo_score = mean(loo_connection_score),
+      min_loo_score = min(loo_connection_score),
+      max_loo_score = max(loo_connection_score),
+      proportion_positive = mean(loo_connection_score > 0),
+      .groups = "drop"
+    ) %>%
+    mutate(
+      stability = case_when(
+        n_loo_estimates < ceiling(length(game_ids) / 2) ~
+          "Insufficient stability evidence",
+        proportion_positive >= 0.80 ~ "Stable positive",
+        proportion_positive <= 0.20 ~ "Stable negative",
+        TRUE ~ "Uncertain"
+      )
+    )
+}
+
+
+make_final_pair_table <- function(connection_scores, stability_results) {
+  connection_scores %>%
+    left_join(stability_results, by = c("id_1", "id_2")) %>%
+    mutate(
+      stability = replace_na(stability, "Insufficient stability evidence")
+    ) %>%
+    select(
+      player_1, player_2, minutes_together, n_games_together,
+      net_per_minute, expected_net_per_minute, connection_score,
+      stability, n_loo_estimates, proportion_positive,
+      min_loo_score, max_loo_score
+    ) %>%
+    mutate(
+      across(
+        c(minutes_together, net_per_minute,
+          expected_net_per_minute, connection_score,
+          proportion_positive, min_loo_score, max_loo_score),
+        ~ round(.x, 2)
+      )
+    ) %>%
+    arrange(desc(connection_score))
+}
+
+
 
 
 ## ------------------------------------------------------------
@@ -464,20 +825,47 @@ exclude_broken_games <- function(stints_df, team_name, min_pct = 0.5) {
 ## ------------------------------------------------------------
 player_lookup <- build_player_lookup(LTU_pbp)
 stints_df     <- build_stints(LTU_pbp)
-##
-## ltu_pairs      <- naive_pair_synergy(stints_df, "LTU", player_lookup)
-## ltu_ratings    <- fit_rapm(stints_df, "LTU", player_lookup)
-## ltu_connection <- compute_connection_scores(stints_df, "LTU", player_lookup)
-##
-
 stints_df_clean <- exclude_broken_games(stints_df, "LTU", min_pct = 0.5)
-nrow(stints_df_clean)  # should be roughly 638 minus the 4 stints from the 2 broken games
+nrow(stints_df_clean)
 
-ltu_pairs      <- naive_pair_synergy(stints_df_clean, "LTU", player_lookup)
-ltu_ratings    <- fit_rapm(stints_df_clean, "LTU", player_lookup)
-ltu_connection <- compute_connection_scores(stints_df_clean, "LTU", player_lookup)
+reconstruction_checks <- validate_reconstruction(
+  stints_df_clean,
+  LTU_pbp,
+  "LTU"
+)
 
-print(ltu_connection)
+ltu_ratings <- fit_rapm(
+  stints_df_clean,
+  "LTU",
+  player_lookup,
+  lambda_choice = "lambda.1se"
+)
+
+ltu_connection <- compute_connection_scores(
+  stints_df_clean,
+  "LTU",
+  player_lookup,
+  min_minutes = 15,
+  min_games = 2,
+  lambda_choice = "lambda.1se"
+)
+
+ltu_stability <- leave_one_game_out_stability(
+  stints_df_clean,
+  "LTU",
+  player_lookup,
+  min_minutes = 15,
+  min_games = 2,
+  lambda_choice = "lambda.1se"
+)
+
+final_pair_table <- make_final_pair_table(
+  ltu_connection,
+  ltu_stability
+)
+
+
+print(final_pair_table)
 
 ## print(ltu_connection)
 ## write.csv(ltu_connection, "LTU_connection_scores.csv", row.names = FALSE)
@@ -506,7 +894,9 @@ print(ltu_connection)
 ## failed when a genuine starter had no recorded action before their team's first substitution — this caused lineup-tracking to drift and corrupt 
 ## the remainder of the game. The eight retained games each preserved 79–100% of expected game-time in the reconstructed stint data.
 
-## An initially prominent pairing (Hii + Holland) did not survive stricter exposure thresholds and game-quality filtering, illustrating why the higher bar was necessary.
+## Re-run the final tables before retaining any earlier named finding:
+## the complete-lineup residual score and two-game threshold may change
+## which pairs appear strongest.
 
 
 # network analysis 
@@ -563,11 +953,19 @@ summarise_player_connectivity <- function(ltu_connection) {
     group_by(player) %>%
     summarise(
       n_qualifying_pairs = n(),
-      avg_connection_score = round(mean(connection_score), 2),
-      total_shared_minutes = round(sum(minutes_together), 1),
+      weighted_connection_score = weighted.mean(
+        connection_score,
+        w = minutes_together,
+        na.rm = TRUE
+      ),
+      cumulative_pair_minutes = sum(minutes_together),
       .groups = "drop"
     ) %>%
-    arrange(desc(avg_connection_score))
+    mutate(
+      weighted_connection_score = round(weighted_connection_score, 2),
+      cumulative_pair_minutes = round(cumulative_pair_minutes, 1)
+    ) %>%
+    arrange(desc(weighted_connection_score))
 }
 
 
@@ -581,6 +979,31 @@ ggsave("LTU_connection_network.png", network_plot, width = 10, height = 8, dpi =
 
 player_connectivity <- summarise_player_connectivity(ltu_connection)
 print(player_connectivity)
+
+
+
+
+# Short tables for interpretation in the report.
+stable_positive_pairs <- final_pair_table %>%
+  filter(stability == "Stable positive") %>%
+  slice_max(connection_score, n = 5, with_ties = FALSE)
+
+stable_negative_pairs <- final_pair_table %>%
+  filter(stability == "Stable negative") %>%
+  slice_min(connection_score, n = 5, with_ties = FALSE)
+
+print(stable_positive_pairs)
+print(stable_negative_pairs)
+
+# Save the principal outputs.
+write.csv(reconstruction_checks,
+          "LTU_reconstruction_checks.csv", row.names = FALSE)
+write.csv(ltu_ratings,
+          "LTU_rapm_ratings_full_precision.csv", row.names = FALSE)
+write.csv(final_pair_table,
+          "LTU_final_pair_connection_table.csv", row.names = FALSE)
+write.csv(player_connectivity,
+          "LTU_player_connectivity_summary.csv", row.names = FALSE)
 
 
 
@@ -798,3 +1221,12 @@ static_network <- build_connection_network_plot(
 )
 
 static_network
+
+
+
+## Of the 73 player pairs that shared at least 15 minutes across at least two games, 
+## 35 showed stable positive connection scores, 28 showed stable negative scores and 10 were uncertain. 
+## Stability was assessed by repeatedly removing one game and recalculating the model. 
+## Stable positive pairs therefore maintained an above-expectation association across most available tests, 
+## while uncertain pairs were more dependent on particular games. These findings identify combinations for further 
+## coaching observation rather than proving player chemistry.
