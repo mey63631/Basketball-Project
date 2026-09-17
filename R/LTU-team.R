@@ -1230,3 +1230,704 @@ static_network
 ## Stable positive pairs therefore maintained an above-expectation association across most available tests, 
 ## while uncertain pairs were more dependent on particular games. These findings identify combinations for further 
 ## coaching observation rather than proving player chemistry.
+
+
+# 1. Build the 2025 coaching-usage network ####
+
+library(dplyr)
+library(purrr)
+library(tidyr)
+library(ggplot2)
+library(igraph)
+library(ggraph)
+library(scales)
+
+
+compute_pair_minutes_network <- function(
+    stints_df,
+    team_name,
+    player_lookup,
+    min_minutes = 1,
+    min_games = 1
+) {
+  
+  pair_minutes <- stints_df %>%
+    filter(
+      team == team_name,
+      duration_sec > 0,
+      map_int(lineup, length) == 5
+    ) %>%
+    mutate(
+      pairs = map(
+        lineup,
+        ~ combn(
+          sort(as.character(.x)),
+          2,
+          simplify = FALSE
+        )
+      )
+    ) %>%
+    select(
+      fixtureId,
+      duration_sec,
+      pairs
+    ) %>%
+    unnest(pairs) %>%
+    mutate(
+      id_1 = map_chr(pairs, 1),
+      id_2 = map_chr(pairs, 2)
+    ) %>%
+    select(-pairs) %>%
+    group_by(id_1, id_2) %>%
+    summarise(
+      minutes_together = sum(duration_sec) / 60,
+      n_games_together = n_distinct(fixtureId),
+      .groups = "drop"
+    ) %>%
+    filter(
+      minutes_together >= min_minutes,
+      n_games_together >= min_games
+    ) %>%
+    left_join(
+      player_lookup,
+      by = c("id_1" = "personId")
+    ) %>%
+    rename(player_1 = player_name) %>%
+    left_join(
+      player_lookup,
+      by = c("id_2" = "personId")
+    ) %>%
+    rename(player_2 = player_name) %>%
+    filter(
+      !is.na(player_1),
+      !is.na(player_2)
+    ) %>%
+    arrange(desc(minutes_together))
+  
+  pair_minutes
+}
+
+
+
+calculate_centralisation <- function(
+    pair_minutes,
+    network_label = "2025"
+) {
+  
+  if (nrow(pair_minutes) == 0) {
+    stop("The pair-minutes table contains no qualifying connections.")
+  }
+  
+  # Create edge table
+  edge_table <- pair_minutes %>%
+    transmute(
+      from = as.character(id_1),
+      to = as.character(id_2),
+      minutes_together
+    )
+  
+  # Create player table
+  vertex_table <- bind_rows(
+    pair_minutes %>%
+      transmute(
+        name = as.character(id_1),
+        player_name = player_1
+      ),
+    
+    pair_minutes %>%
+      transmute(
+        name = as.character(id_2),
+        player_name = player_2
+      )
+  ) %>%
+    distinct(name, .keep_all = TRUE)
+  
+  # Construct an undirected shared-minutes network
+  network_graph <- graph_from_data_frame(
+    d = edge_table,
+    directed = FALSE,
+    vertices = vertex_table
+  )
+  
+  # Minutes are connection strength
+  E(network_graph)$weight <-
+    E(network_graph)$minutes_together
+  
+  # Betweenness and closeness need distance:
+  # greater shared minutes = shorter distance
+  E(network_graph)$distance <-
+    1 / E(network_graph)$minutes_together
+  
+  # Individual player measures
+  player_degree <- degree(
+    network_graph,
+    mode = "all"
+  )
+  
+  player_strength <- strength(
+    network_graph,
+    weights = E(network_graph)$weight
+  )
+  
+  player_betweenness <- betweenness(
+    network_graph,
+    directed = FALSE,
+    weights = E(network_graph)$distance,
+    normalized = TRUE
+  )
+  
+  player_closeness <- closeness(
+    network_graph,
+    mode = "all",
+    weights = E(network_graph)$distance,
+    normalized = TRUE
+  )
+  
+  player_eigenvector <- eigen_centrality(
+    network_graph,
+    directed = FALSE,
+    weights = E(network_graph)$weight
+  )$vector
+  
+  # Add weighted strength to the graph for plotting
+  V(network_graph)$weighted_strength <-
+    as.numeric(player_strength)
+  
+  # Player-level table
+  player_centrality <- tibble(
+    network = as.character(network_label),
+    personId = V(network_graph)$name,
+    player_name = V(network_graph)$player_name,
+    degree = as.numeric(player_degree),
+    weighted_strength = as.numeric(player_strength),
+    betweenness = as.numeric(player_betweenness),
+    closeness = as.numeric(player_closeness),
+    eigenvector_centrality =
+      as.numeric(player_eigenvector)
+  ) %>%
+    arrange(desc(weighted_strength))
+  
+  number_players <- vcount(network_graph)
+  total_edge_weight <- sum(E(network_graph)$weight)
+  
+  # Weighted-strength centralisation
+  strength_numerator <- sum(
+    max(player_strength) - player_strength
+  )
+  
+  strength_denominator <- if (number_players > 2) {
+    (number_players - 2) * total_edge_weight
+  } else {
+    NA_real_
+  }
+  
+  weighted_strength_centralisation <-
+    strength_numerator / strength_denominator
+  
+  # Betweenness centralisation
+  raw_betweenness <- betweenness(
+    network_graph,
+    directed = FALSE,
+    weights = E(network_graph)$distance,
+    normalized = FALSE
+  )
+  
+  betweenness_numerator <- sum(
+    max(raw_betweenness) - raw_betweenness
+  )
+  
+  betweenness_denominator <- if (number_players > 2) {
+    ((number_players - 1)^2 *
+       (number_players - 2)) / 2
+  } else {
+    NA_real_
+  }
+  
+  betweenness_centralisation <-
+    betweenness_numerator /
+    betweenness_denominator
+  
+  # Whole-network table
+  network_centralisation <- tibble(
+    network = as.character(network_label),
+    n_players = number_players,
+    n_edges = ecount(network_graph),
+    network_density = edge_density(
+      network_graph,
+      loops = FALSE
+    ),
+    weighted_strength_centralisation =
+      weighted_strength_centralisation,
+    betweenness_centralisation =
+      betweenness_centralisation
+  )
+  
+  list(
+    graph = network_graph,
+    player_centrality = player_centrality,
+    network_centralisation =
+      network_centralisation
+  )
+}
+# Create shared-minutes edges for the full 2025 season.
+# A low one-minute threshold is used because this is a usage network,
+# rather than the stricter adjusted-connection analysis.
+pair_minutes_2025 <- compute_pair_minutes_network(
+  stints_df = stints_df_clean,
+  team_name = "LTU",
+  player_lookup = player_lookup,
+  min_minutes = 1,
+  min_games = 1
+)
+
+# Calculate player centrality and whole-team centralisation.
+centrality_2025 <- calculate_centralisation(
+  pair_minutes = pair_minutes_2025,
+  network_label = "2025"
+)
+
+# 2. Player centrality ####
+
+player_centrality_2025 <- centrality_2025$player_centrality
+
+player_centrality_2025
+
+
+#Top players by weighted strength
+top_strength <- player_centrality_2025 %>%
+  slice_max(
+    weighted_strength,
+    n = 10,
+    with_ties = FALSE
+  )
+
+ggplot(
+  top_strength,
+  aes(
+    x = reorder(player_name, weighted_strength),
+    y = weighted_strength
+  )
+) +
+  geom_col(fill = "steelblue") +
+  coord_flip() +
+  theme_classic(base_size = 14) +
+  labs(
+    title = "Most central LTU players by shared minutes",
+    subtitle = "2025 season",
+    x = "Player",
+    y = "Cumulative pair-minutes"
+  )
+
+
+#Top players by betweenness
+top_betweenness <- player_centrality_2025 %>%
+  slice_max(
+    betweenness,
+    n = 10,
+    with_ties = FALSE
+  )
+
+ggplot(
+  top_betweenness,
+  aes(
+    x = reorder(player_name, betweenness),
+    y = betweenness
+  )
+) +
+  geom_col(fill = "lightblue3") +
+  coord_flip() +
+  theme_classic(base_size = 14) +
+  labs(
+    title = "LTU players by betweenness centrality",
+    subtitle = "2025 shared-playing-time network",
+    x = "Player",
+    y = "Betweenness centrality"
+  )
+
+# Top players by eigenvector centrality
+top_eigenvector <- player_centrality_2025 %>%
+  slice_max(
+    eigenvector_centrality,
+    n = 10,
+    with_ties = FALSE
+  )
+
+ggplot(
+  top_eigenvector,
+  aes(
+    x = reorder(player_name, eigenvector_centrality),
+    y = eigenvector_centrality
+  )
+) +
+  geom_col(fill = "aquamarine3") +
+  coord_flip() +
+  theme_classic(base_size = 14) +
+  labs(
+    title = "LTU players by eigenvector centrality",
+    subtitle = "2025 shared-playing-time network",
+    x = "Player",
+    y = "Eigenvector centrality"
+  )
+
+
+
+# 3. Revised implementation for LTU #####
+
+
+library(dplyr)
+library(igraph)
+
+# Package-free Gini coefficient
+gini_coefficient <- function(x) {
+  
+  x <- as.numeric(x)
+  x <- x[is.finite(x) & !is.na(x)]
+  
+  if (length(x) == 0 || sum(x) == 0) {
+    return(0)
+  }
+  
+  x <- sort(x)
+  n <- length(x)
+  
+  sum(
+    (2 * seq_len(n) - n - 1) * x
+  ) / (n * sum(x))
+}
+
+
+calculate_centralisation <- function(
+    pair_minutes,
+    network_label = "2025"
+) {
+  
+  if (nrow(pair_minutes) == 0) {
+    stop("The pair-minutes table contains no qualifying connections.")
+  }
+  
+  # Edge table
+  edge_table <- pair_minutes %>%
+    transmute(
+      from = as.character(id_1),
+      to = as.character(id_2),
+      minutes_together
+    )
+  
+  # Player table
+  vertex_table <- bind_rows(
+    pair_minutes %>%
+      transmute(
+        name = as.character(id_1),
+        player_name = player_1
+      ),
+    
+    pair_minutes %>%
+      transmute(
+        name = as.character(id_2),
+        player_name = player_2
+      )
+  ) %>%
+    distinct(name, .keep_all = TRUE)
+  
+  # Undirected shared-minutes network
+  network_graph <- graph_from_data_frame(
+    d = edge_table,
+    directed = FALSE,
+    vertices = vertex_table
+  )
+  
+  # Raw minutes represent connection strength
+  E(network_graph)$weight <-
+    E(network_graph)$minutes_together
+  
+  # For shortest-path measures:
+  # more minutes together = shorter network distance
+  E(network_graph)$distance <-
+    1 / E(network_graph)$minutes_together
+  
+  # ----------------------------------------------------------
+  # Player-level centrality
+  # ----------------------------------------------------------
+  
+  player_degree <- degree(
+    network_graph,
+    mode = "all"
+  )
+  
+  player_strength <- strength(
+    network_graph,
+    weights = E(network_graph)$weight
+  )
+  
+  weighted_betweenness_raw <- betweenness(
+    network_graph,
+    directed = FALSE,
+    weights = E(network_graph)$distance,
+    normalized = FALSE
+  )
+  
+  weighted_betweenness_normalised <- betweenness(
+    network_graph,
+    directed = FALSE,
+    weights = E(network_graph)$distance,
+    normalized = TRUE
+  )
+  
+  player_closeness <- closeness(
+    network_graph,
+    mode = "all",
+    weights = E(network_graph)$distance,
+    normalized = TRUE
+  )
+  
+  player_eigenvector <- eigen_centrality(
+    network_graph,
+    directed = FALSE,
+    weights = E(network_graph)$weight
+  )$vector
+  
+  # Add attributes for network plotting
+  V(network_graph)$weighted_strength <-
+    as.numeric(player_strength)
+  
+  V(network_graph)$weighted_betweenness <-
+    as.numeric(weighted_betweenness_normalised)
+  
+  player_centrality <- tibble(
+    network = as.character(network_label),
+    personId = V(network_graph)$name,
+    player_name = V(network_graph)$player_name,
+    degree = as.numeric(player_degree),
+    weighted_strength = as.numeric(player_strength),
+    weighted_betweenness =
+      as.numeric(weighted_betweenness_normalised),
+    weighted_closeness =
+      as.numeric(player_closeness),
+    eigenvector_centrality =
+      as.numeric(player_eigenvector)
+  ) %>%
+    arrange(desc(weighted_strength))
+  
+  # ----------------------------------------------------------
+  # Network-level measures
+  # ----------------------------------------------------------
+  
+  n_players <- vcount(network_graph)
+  
+  strength_mean <- mean(player_strength)
+  strength_sd <- sd(player_strength)
+  
+  # Coefficient of variation:
+  # larger value = greater variation in shared-minute exposure
+  strength_cv <- if (strength_mean > 0) {
+    strength_sd / strength_mean
+  } else {
+    NA_real_
+  }
+  
+  # Gini:
+  # 0 = completely equal;
+  # closer to 1 = concentrated among fewer players
+  strength_gini <- gini_coefficient(
+    player_strength
+  )
+  
+  weighted_betweenness_gini <- gini_coefficient(
+    weighted_betweenness_raw
+  )
+  
+  # ----------------------------------------------------------
+  # Standard unweighted Freeman betweenness centralisation
+  # ----------------------------------------------------------
+  # weights = NA deliberately ignores playing-time weights.
+  # This makes the Freeman denominator appropriate.
+  
+  unweighted_betweenness <- betweenness(
+    network_graph,
+    directed = FALSE,
+    weights = NA,
+    normalized = FALSE
+  )
+  
+  freeman_numerator <- sum(
+    max(unweighted_betweenness) -
+      unweighted_betweenness
+  )
+  
+  freeman_denominator <- if (n_players > 2) {
+    ((n_players - 1)^2 *
+       (n_players - 2)) / 2
+  } else {
+    NA_real_
+  }
+  
+  freeman_betweenness_centralisation <-
+    freeman_numerator /
+    freeman_denominator
+  
+  network_centralisation <- tibble(
+    network = as.character(network_label),
+    n_players = n_players,
+    n_edges = ecount(network_graph),
+    
+    network_density = edge_density(
+      network_graph,
+      loops = FALSE
+    ),
+    
+    mean_weighted_strength =
+      mean(player_strength),
+    
+    strength_cv =
+      strength_cv,
+    
+    strength_gini =
+      strength_gini,
+    
+    weighted_betweenness_gini =
+      weighted_betweenness_gini,
+    
+    freeman_betweenness_centralisation =
+      freeman_betweenness_centralisation
+  )
+  
+  list(
+    graph = network_graph,
+    player_centrality = player_centrality,
+    network_centralisation =
+      network_centralisation
+  )
+}
+
+
+# Use the full usage network with the one-minute and one-game thresholds:
+
+pair_minutes_2025 <- compute_pair_minutes_network(
+  stints_df = stints_df_clean,
+  team_name = "LTU",
+  player_lookup = player_lookup,
+  min_minutes = 1,
+  min_games = 1
+)
+
+centrality_2025 <- calculate_centralisation(
+  pair_minutes = pair_minutes_2025,
+  network_label = "LTU 2025"
+)
+
+centrality_2025$network_centralisation %>%
+  mutate(
+    across(
+      where(is.numeric),
+      ~ round(.x, 3)
+    )
+  ) %>% as.data.frame() %>% print()
+
+
+centrality_2025$player_centrality %>%
+  select(
+    player_name,
+    degree,
+    weighted_strength,
+    weighted_betweenness,
+    weighted_closeness,
+    eigenvector_centrality
+  ) %>%
+  mutate(
+    across(
+      where(is.numeric),
+      ~ round(.x, 3)
+    )
+  ) %>%
+  arrange(desc(weighted_betweenness)) 
+
+
+
+#Top bridging players
+top_bridging_players <- centrality_2025$player_centrality %>%
+  slice_max(
+    weighted_betweenness,
+    n = 10,
+    with_ties = FALSE
+  )
+
+ggplot(
+  top_bridging_players,
+  aes(
+    x = reorder(
+      player_name,
+      weighted_betweenness
+    ),
+    y = weighted_betweenness
+  )
+) +
+  geom_col(fill = "lightblue3") +
+  coord_flip() +
+  theme_classic(base_size = 14) +
+  labs(
+    title = "LTU players by weighted betweenness",
+    subtitle = paste(
+      "Stronger shared-minute connections",
+      "are treated as shorter network distances"
+    ),
+    x = "Player",
+    y = "Weighted betweenness"
+  )
+
+
+
+all_players <- unique(c(pair_minutes_2025$player_1, pair_minutes_2025$player_2))
+length(all_players)  # should be exactly 16
+
+all_possible <- combn(sort(all_players), 2, simplify = FALSE)
+
+existing_pairs <- pair_minutes_2025 %>%
+  transmute(a = pmin(player_1, player_2), b = pmax(player_1, player_2))
+
+missing_pairs <- tibble(
+  a = map_chr(all_possible, 1),
+  b = map_chr(all_possible, 2)
+) %>%
+  anti_join(existing_pairs, by = c("a", "b"))
+
+nrow(missing_pairs)  # should now be 8, matching 120 - 112
+print(missing_pairs)
+bind_rows(
+  missing_pairs %>% select(player = a),
+  missing_pairs %>% select(player = b)
+) %>%
+  count(player, sort = TRUE)
+
+
+ltu_minutes %>% filter(player_name %in% c("Coco Erin", "Alana  Steele", "Nicoletta  Karakiklas", "Tahlia Leeson"))
+
+
+
+# game-participation check: 
+compute_player_game_participation <- function(stints_df, team_name, player_lookup) {
+  team_stints <- stints_df %>% filter(team == team_name)
+  
+  team_stints %>%
+    mutate(stint_id = row_number()) %>%
+    select(stint_id, fixtureId, lineup, duration_sec) %>%
+    unnest(lineup) %>%
+    rename(personId = lineup) %>%
+    group_by(personId) %>%
+    summarise(
+      n_games_played = n_distinct(fixtureId),
+      total_minutes = round(sum(duration_sec) / 60, 1),
+      avg_minutes_per_game = round(total_minutes / n_games_played, 1),
+      .groups = "drop"
+    ) %>%
+    left_join(player_lookup, by = "personId") %>%
+    select(player_name, n_games_played, total_minutes, avg_minutes_per_game) %>%
+    arrange(n_games_played, total_minutes)
+}
+
+game_participation <- compute_player_game_participation(stints_df_clean, "LTU", player_lookup)
+print(game_participation)
+
+# specifically check the four flagged low-exposure players
+game_participation %>%
+  filter(player_name %in% c("Alana  Steele", "Nicoletta  Karakiklas", "Coco Erin", "Anastasia Gak"))
+
