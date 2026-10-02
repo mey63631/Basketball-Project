@@ -188,27 +188,19 @@ validate_period_start <- function(period_df, team_name, carried_lineup, fid, per
 
 
 ## ------------------------------------------------------------
-## 2. Build stints (keyed on personId; validates quarter carryover)
+## 2. Build stints
+##    Adds exact stint clocks and cumulative score at stint start
 ## ------------------------------------------------------------
-build_stints <- function(pbp_df, period_length = PERIOD_LENGTH_SECONDS, half_boundary_periods = c()) {
-  # NOTE: half_boundary_periods defaults to none (pure carryover for
-  # every period). An earlier version tried re-detecting starters fresh
-  # at period 3 (halftime) using the same heuristic as period 1. That
-  # made things WORSE: stint count dropped from 702 to 504 (-28%)
-  # because the period-1 heuristic doesn't transfer to halftime — the
-  # second half often opens with a substitution almost immediately,
-  # so far fewer than 5 players get detected before it, and those
-  # stints get silently dropped. Carrying over the lineup and
-  # documenting the resulting ~18 flagged discrepancies as a stated
-  # limitation preserves far more usable data than trying to "fix"
-  # them via re-detection.
+build_stints <- function(
+    pbp_df,
+    period_length = PERIOD_LENGTH_SECONDS,
+    half_boundary_periods = c()
+) {
   all_stints <- list()
   n_quarter_flags <- 0
   
-  # preserve original scrape order as a tie-breaker for events sharing
-  # the same clock_seconds (e.g. a shot and a substitution logged at
-  # the same second) — arrange() alone doesn't guarantee this
-  pbp_df <- pbp_df %>% mutate(.orig_order = row_number())
+  pbp_df <- pbp_df %>%
+    mutate(.orig_order = row_number())
   
   fixture_ids <- unique(pbp_df$fixtureId)
   
@@ -219,69 +211,129 @@ build_stints <- function(pbp_df, period_length = PERIOD_LENGTH_SECONDS, half_bou
       mutate(is_sub = action == "substitution")
     
     teams <- unique(na.omit(game_df$team))
-    if (length(teams) != 2) next
-    team_a <- teams[1]; team_b <- teams[2]
+    
+    if (length(teams) != 2) {
+      next
+    }
+    
+    team_a <- teams[1]
+    team_b <- teams[2]
     
     first_period <- min(game_df$period)
-    period1_df <- game_df %>% filter(period == first_period)
-    lineup <- list()
-    lineup[[team_a]] <- get_starting_lineup(period1_df, team_a)
-    lineup[[team_b]] <- get_starting_lineup(period1_df, team_b)
+    period1_df <- game_df %>%
+      filter(period == first_period)
     
+    lineup <- list()
+    lineup[[team_a]] <- get_starting_lineup(
+      period1_df,
+      team_a
+    )
+    lineup[[team_b]] <- get_starting_lineup(
+      period1_df,
+      team_b
+    )
+    
+    # Points scored during the current stint.
     points <- setNames(c(0, 0), c(team_a, team_b))
+    
+    # Persistent game score. Unlike `points`, this is never reset.
+    cumulative_points <- setNames(
+      c(0, 0),
+      c(team_a, team_b)
+    )
+    
+    # Score at the exact moment the current stint began.
+    stint_start_score <- cumulative_points
+    
     current_period <- first_period
     stint_start_clock <- period_length
     n <- nrow(game_df)
     
     flush <- function(end_clock, per) {
-      for (pair in list(c(team_a, team_b), c(team_b, team_a))) {
-        t <- pair[1]; opp <- pair[2]
+      team_pairs <- list(
+        c(team_a, team_b),
+        c(team_b, team_a)
+      )
+      
+      for (pair in team_pairs) {
+        t <- pair[1]
+        opp <- pair[2]
+        
         if (length(lineup[[t]]) == 5) {
           own_roster <- sort(lineup[[t]])
           opp_roster <- sort(lineup[[opp]])
+          
           all_stints[[length(all_stints) + 1]] <<- tibble(
-            fixtureId = fid, period = per, team = t,
-            lineup = list(own_roster), opponent = opp,
+            fixtureId = fid,
+            period = per,
+            team = t,
+            lineup = list(own_roster),
+            opponent = opp,
             opp_lineup = list(opp_roster),
-            team_points = points[[t]], opp_points = points[[opp]],
-            duration_sec = stint_start_clock - end_clock
+            team_points = points[[t]],
+            opp_points = points[[opp]],
+            duration_sec = stint_start_clock - end_clock,
+            start_clock_seconds = stint_start_clock,
+            end_clock_seconds = end_clock,
+            score_margin_start =
+              stint_start_score[[t]] -
+              stint_start_score[[opp]]
           )
         }
       }
+      
+      # Roll this stint's scoring into the persistent game score.
+      cumulative_points <<- cumulative_points + points
+      stint_start_score <<- cumulative_points
     }
     
     i <- 1
+    
     while (i <= n) {
       row <- game_df[i, ]
       
       if (row$period != current_period) {
         flush(0, current_period)
+        
         points <- setNames(c(0, 0), c(team_a, team_b))
         current_period <- row$period
         stint_start_clock <- period_length
         
-        new_period_df <- game_df %>% filter(period == current_period)
+        new_period_df <- game_df %>%
+          filter(period == current_period)
         
         if (current_period %in% half_boundary_periods) {
-          # halftime break: re-detect starters fresh (same heuristic as
-          # period 1) rather than carrying over — evidence from
-          # validate_period_start() showed flags cluster overwhelmingly
-          # at this boundary (8/18 in period 3 alone), consistent with
-          # real halftime lineup changes the substitution log doesn't
-          # capture the same way as an in-game sub
-          lineup[[team_a]] <- get_starting_lineup(new_period_df, team_a)
-          lineup[[team_b]] <- get_starting_lineup(new_period_df, team_b)
+          lineup[[team_a]] <- get_starting_lineup(
+            new_period_df,
+            team_a
+          )
+          lineup[[team_b]] <- get_starting_lineup(
+            new_period_df,
+            team_b
+          )
         } else {
-          # ordinary quarter break: validate the carryover assumption
           n_quarter_flags <- n_quarter_flags +
-            validate_period_start(new_period_df, team_a, lineup[[team_a]], fid, current_period) +
-            validate_period_start(new_period_df, team_b, lineup[[team_b]], fid, current_period)
+            validate_period_start(
+              new_period_df,
+              team_a,
+              lineup[[team_a]],
+              fid,
+              current_period
+            ) +
+            validate_period_start(
+              new_period_df,
+              team_b,
+              lineup[[team_b]],
+              fid,
+              current_period
+            )
         }
       }
       
       if (isTRUE(row$is_sub)) {
         same_time_idx <- i
         j <- i
+        
         while (j + 1 <= n &&
                game_df$period[j + 1] == current_period &&
                isTRUE(game_df$is_sub[j + 1]) &&
@@ -296,18 +348,34 @@ build_stints <- function(pbp_df, period_length = PERIOD_LENGTH_SECONDS, half_bou
           r <- game_df[k, ]
           tm <- r$team
           pid <- as.character(r$personId)
-          if (r$detail == "out") { lineup[[tm]] <- setdiff(lineup[[tm]], pid) }
-          else if (r$detail == "in") { lineup[[tm]] <- union(lineup[[tm]], pid) }
+          
+          if (r$detail == "out") {
+            lineup[[tm]] <- setdiff(
+              lineup[[tm]],
+              pid
+            )
+          } else if (r$detail == "in") {
+            lineup[[tm]] <- union(
+              lineup[[tm]],
+              pid
+            )
+          }
         }
         
         points <- setNames(c(0, 0), c(team_a, team_b))
         stint_start_clock <- row$clock_seconds
         i <- j + 1
+        
         next
       }
       
-      if (row$action %in% names(SCORE_POINTS) && isTRUE(row$success)) {
-        points[[row$team]] <- points[[row$team]] + SCORE_POINTS[[row$action]]
+      if (
+        row$action %in% names(SCORE_POINTS) &&
+        isTRUE(row$success)
+      ) {
+        points[[row$team]] <-
+          points[[row$team]] +
+          SCORE_POINTS[[row$action]]
       }
       
       i <- i + 1
@@ -316,10 +384,68 @@ build_stints <- function(pbp_df, period_length = PERIOD_LENGTH_SECONDS, half_bou
     flush(0, current_period)
   }
   
-  cat("\nTotal quarter-break lineup discrepancy flags across dataset:", n_quarter_flags,
-      "- document this count as a data limitation in your write-up.\n")
+  cat(
+    "\nTotal quarter-break lineup discrepancy flags across dataset:",
+    n_quarter_flags,
+    "- document this count as a data limitation in your write-up.\n"
+  )
   
   bind_rows(all_stints)
+}
+
+
+## ------------------------------------------------------------
+## 2A. Add score-state, game-phase and clutch variables
+## ------------------------------------------------------------
+add_game_state_variables <- function(
+    stints_df,
+    expected_periods = 4,
+    period_length = PERIOD_LENGTH_SECONDS
+) {
+  stints_df %>%
+    mutate(
+      # Regulation time remaining. Overtime uses the period clock only.
+      game_seconds_remaining = if_else(
+        period <= expected_periods,
+        (expected_periods - period) * period_length +
+          start_clock_seconds,
+        start_clock_seconds
+      ),
+      
+      score_state = case_when(
+        score_margin_start >= 6 ~ "Leading by 6+",
+        score_margin_start <= -6 ~ "Trailing by 6+",
+        TRUE ~ "Within 5 points"
+      ),
+      
+      score_state = factor(
+        score_state,
+        levels = c(
+          "Leading by 6+",
+          "Within 5 points",
+          "Trailing by 6+"
+        )
+      ),
+      
+      game_phase = case_when(
+        period <= 2 ~ "First half",
+        period == 3 ~ "Third quarter",
+        period == 4 & start_clock_seconds > 300 ~
+          "Early fourth quarter",
+        period == 4 & start_clock_seconds <= 300 ~
+          "Final five minutes",
+        period > 4 ~ "Overtime",
+        TRUE ~ NA_character_
+      ),
+      
+      late_game =
+        period == 4 &
+        start_clock_seconds <= 300,
+      
+      clutch_situation =
+        late_game &
+        abs(score_margin_start) <= 5
+    )
 }
 
 
@@ -823,37 +949,48 @@ make_final_pair_table <- function(connection_scores, stability_results) {
 ## ------------------------------------------------------------
 ## USAGE
 ## ------------------------------------------------------------
-player_lookup <- build_player_lookup(LTU_pbp)
-stints_df     <- build_stints(LTU_pbp)
-stints_df_clean <- exclude_broken_games(stints_df, "LTU", min_pct = 0.5)
+player_lookup <- build_player_lookup(
+  LTU_pbp
+)
+
+stints_df <- build_stints(
+  LTU_pbp
+)
+
+stints_df_clean <- exclude_broken_games(
+  stints_df,
+  team_name = "LTU",
+  min_pct = 0.50
+)
+
 nrow(stints_df_clean)
 
 reconstruction_checks <- validate_reconstruction(
-  stints_df_clean,
-  LTU_pbp,
-  "LTU"
+  stints_df = stints_df_clean,
+  pbp_df = LTU_pbp,
+  team_name = "LTU"
 )
 
 ltu_ratings <- fit_rapm(
-  stints_df_clean,
-  "LTU",
-  player_lookup,
+  stints_df = stints_df_clean,
+  team_name = "LTU",
+  player_lookup = player_lookup,
   lambda_choice = "lambda.1se"
 )
 
 ltu_connection <- compute_connection_scores(
-  stints_df_clean,
-  "LTU",
-  player_lookup,
+  stints_df = stints_df_clean,
+  team_name = "LTU",
+  player_lookup = player_lookup,
   min_minutes = 15,
   min_games = 2,
   lambda_choice = "lambda.1se"
 )
 
 ltu_stability <- leave_one_game_out_stability(
-  stints_df_clean,
-  "LTU",
-  player_lookup,
+  stints_df = stints_df_clean,
+  team_name = "LTU",
+  player_lookup = player_lookup,
   min_minutes = 15,
   min_games = 2,
   lambda_choice = "lambda.1se"
@@ -1930,4 +2067,399 @@ print(game_participation)
 # specifically check the four flagged low-exposure players
 game_participation %>%
   filter(player_name %in% c("Alana  Steele", "Nicoletta  Karakiklas", "Coco Erin", "Anastasia Gak"))
+
+
+## ============================================================
+## SITUATIONAL LINEUP STRATEGY
+## Score margin, time remaining, late-game and clutch usage
+## ============================================================
+
+enriched_stints <- add_game_state_variables(
+  stints_df_clean
+)
+
+
+## ------------------------------------------------------------
+## 1. Validation checks
+## ------------------------------------------------------------
+score_margin_check <- enriched_stints %>%
+  filter(team == "LTU") %>%
+  summarise(
+    min_margin = min(
+      score_margin_start,
+      na.rm = TRUE
+    ),
+    max_margin = max(
+      score_margin_start,
+      na.rm = TRUE
+    ),
+    missing_margin = sum(
+      is.na(score_margin_start)
+    )
+  )
+
+clutch_coverage <- enriched_stints %>%
+  filter(
+    team == "LTU",
+    clutch_situation
+  ) %>%
+  summarise(
+    n_stints = n(),
+    total_minutes = sum(duration_sec) / 60,
+    n_games = n_distinct(fixtureId)
+  )
+
+score_state_coverage <- enriched_stints %>%
+  filter(team == "LTU") %>%
+  group_by(score_state) %>%
+  summarise(
+    n_stints = n(),
+    total_minutes = sum(duration_sec) / 60,
+    n_games = n_distinct(fixtureId),
+    .groups = "drop"
+  ) %>%
+  arrange(score_state)
+
+print(score_margin_check)
+print(clutch_coverage)
+print(score_state_coverage)
+
+
+## ------------------------------------------------------------
+## 2. Helper: convert a personId lineup into player names
+## ------------------------------------------------------------
+make_lineup_label <- function(
+    lineup_ids,
+    player_lookup
+) {
+  lineup_ids <- as.character(lineup_ids)
+  
+  lineup_names <- player_lookup$player_name[
+    match(
+      lineup_ids,
+      player_lookup$personId
+    )
+  ]
+  
+  # Retain the ID if a display name is unexpectedly unavailable.
+  lineup_names[is.na(lineup_names)] <-
+    lineup_ids[is.na(lineup_names)]
+  
+  paste(
+    sort(lineup_names),
+    collapse = " | "
+  )
+}
+
+
+## ------------------------------------------------------------
+## 3. Five-player lineup performance by score state
+## ------------------------------------------------------------
+situational_lineup_summary <- enriched_stints %>%
+  filter(team == "LTU") %>%
+  mutate(
+    lineup_name = map_chr(
+      lineup,
+      make_lineup_label,
+      player_lookup = player_lookup
+    )
+  ) %>%
+  group_by(
+    lineup_name,
+    score_state
+  ) %>%
+  summarise(
+    minutes = sum(duration_sec) / 60,
+    games = n_distinct(fixtureId),
+    n_stints = n(),
+    points_for = sum(team_points),
+    points_against = sum(opp_points),
+    net_points = points_for - points_against,
+    net_per_minute = if_else(
+      minutes > 0,
+      net_points / minutes,
+      NA_real_
+    ),
+    .groups = "drop"
+  ) %>%
+  mutate(
+    evidence_level = case_when(
+      minutes >= 5 & games >= 2 ~ "Adequate exposure",
+      TRUE ~ "Limited exposure"
+    )
+  ) %>%
+  arrange(
+    score_state,
+    desc(minutes)
+  )
+
+# Use this smaller table for the principal interpretation.
+lineups_with_adequate_exposure <-
+  situational_lineup_summary %>%
+  filter(evidence_level == "Adequate exposure")
+
+print(situational_lineup_summary)
+print(lineups_with_adequate_exposure)
+
+
+## ------------------------------------------------------------
+## 4. Five-player lineup performance by game phase
+## ------------------------------------------------------------
+lineup_by_game_phase <- enriched_stints %>%
+  filter(team == "LTU") %>%
+  mutate(
+    lineup_name = map_chr(
+      lineup,
+      make_lineup_label,
+      player_lookup = player_lookup
+    )
+  ) %>%
+  group_by(
+    lineup_name,
+    game_phase
+  ) %>%
+  summarise(
+    minutes = sum(duration_sec) / 60,
+    games = n_distinct(fixtureId),
+    n_stints = n(),
+    net_points =
+      sum(team_points) -
+      sum(opp_points),
+    net_per_minute = if_else(
+      minutes > 0,
+      net_points / minutes,
+      NA_real_
+    ),
+    .groups = "drop"
+  ) %>%
+  arrange(
+    game_phase,
+    desc(minutes)
+  )
+
+print(lineup_by_game_phase)
+
+
+## ------------------------------------------------------------
+## 5. Late-game and clutch lineup summaries
+## ------------------------------------------------------------
+late_game_lineups <- enriched_stints %>%
+  filter(
+    team == "LTU",
+    late_game
+  ) %>%
+  mutate(
+    lineup_name = map_chr(
+      lineup,
+      make_lineup_label,
+      player_lookup = player_lookup
+    )
+  ) %>%
+  group_by(lineup_name) %>%
+  summarise(
+    minutes = sum(duration_sec) / 60,
+    games = n_distinct(fixtureId),
+    n_stints = n(),
+    net_points =
+      sum(team_points) -
+      sum(opp_points),
+    net_per_minute = if_else(
+      minutes > 0,
+      net_points / minutes,
+      NA_real_
+    ),
+    .groups = "drop"
+  ) %>%
+  arrange(desc(minutes))
+
+clutch_lineups <- enriched_stints %>%
+  filter(
+    team == "LTU",
+    clutch_situation
+  ) %>%
+  mutate(
+    lineup_name = map_chr(
+      lineup,
+      make_lineup_label,
+      player_lookup = player_lookup
+    )
+  ) %>%
+  group_by(lineup_name) %>%
+  summarise(
+    minutes = sum(duration_sec) / 60,
+    games = n_distinct(fixtureId),
+    n_stints = n(),
+    net_points =
+      sum(team_points) -
+      sum(opp_points),
+    net_per_minute = if_else(
+      minutes > 0,
+      net_points / minutes,
+      NA_real_
+    ),
+    .groups = "drop"
+  ) %>%
+  arrange(desc(minutes))
+
+print(late_game_lineups)
+print(clutch_lineups)
+
+
+## ------------------------------------------------------------
+## 6. Pair usage by score state
+## ------------------------------------------------------------
+pair_by_score_state <- enriched_stints %>%
+  filter(team == "LTU") %>%
+  mutate(
+    pairs = map(
+      lineup,
+      ~ combn(
+        sort(as.character(.x)),
+        2,
+        simplify = FALSE
+      )
+    )
+  ) %>%
+  select(
+    fixtureId,
+    duration_sec,
+    score_state,
+    pairs
+  ) %>%
+  unnest(pairs) %>%
+  mutate(
+    id_1 = map_chr(pairs, 1),
+    id_2 = map_chr(pairs, 2)
+  ) %>%
+  group_by(
+    id_1,
+    id_2,
+    score_state
+  ) %>%
+  summarise(
+    minutes = sum(duration_sec) / 60,
+    games = n_distinct(fixtureId),
+    .groups = "drop"
+  ) %>%
+  complete(
+    nesting(id_1, id_2),
+    score_state,
+    fill = list(
+      minutes = 0,
+      games = 0
+    )
+  ) %>%
+  pivot_wider(
+    names_from = score_state,
+    values_from = c(minutes, games),
+    names_glue = "{.value}_{score_state}",
+    names_expand = TRUE,
+    values_fill = 0
+  )
+
+
+## ------------------------------------------------------------
+## 7. Combine adjusted connection scores with situational usage
+## ------------------------------------------------------------
+connection_usage_by_score <- ltu_connection %>%
+  left_join(
+    pair_by_score_state,
+    by = c("id_1", "id_2")
+  ) %>%
+  mutate(
+    across(
+      starts_with("minutes_"),
+      ~ replace_na(.x, 0)
+    ),
+    across(
+      starts_with("games_"),
+      ~ replace_na(.x, 0)
+    )
+  ) %>%
+  arrange(desc(connection_score)) %>%
+  select(
+    player_1,
+    player_2,
+    connection_score,
+    minutes_together,
+    n_games_together,
+    starts_with("minutes_"),
+    starts_with("games_")
+  )
+
+print(connection_usage_by_score)
+
+
+## ------------------------------------------------------------
+## 8. Check whether timeout events are available
+## ------------------------------------------------------------
+# This only confirms how timeouts are coded. A separate event-to-stint
+# matching step is required before estimating post-timeout performance.
+timeout_events <- LTU_pbp %>%
+  filter(
+    str_detect(
+      str_to_lower(
+        paste(
+          action,
+          detail
+        )
+      ),
+      "timeout|time out"
+    )
+  ) %>%
+  select(
+    fixtureId,
+    period,
+    clock_seconds,
+    team,
+    action,
+    detail
+  ) %>%
+  arrange(
+    fixtureId,
+    period,
+    desc(clock_seconds)
+  )
+
+print(timeout_events)
+
+
+## ------------------------------------------------------------
+## 9. Save situational-strategy outputs
+## ------------------------------------------------------------
+write.csv(
+  score_state_coverage,
+  "LTU_score_state_coverage.csv",
+  row.names = FALSE
+)
+
+write.csv(
+  situational_lineup_summary,
+  "LTU_situational_lineup_summary.csv",
+  row.names = FALSE
+)
+
+write.csv(
+  lineup_by_game_phase,
+  "LTU_lineup_by_game_phase.csv",
+  row.names = FALSE
+)
+
+write.csv(
+  late_game_lineups,
+  "LTU_late_game_lineups.csv",
+  row.names = FALSE
+)
+
+write.csv(
+  clutch_lineups,
+  "LTU_clutch_lineups.csv",
+  row.names = FALSE
+)
+
+write.csv(
+  connection_usage_by_score,
+  "LTU_connection_usage_by_score.csv",
+  row.names = FALSE
+)
 
