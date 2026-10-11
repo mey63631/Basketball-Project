@@ -1760,3 +1760,195 @@ write.csv(connection_usage_by_score, "LTU_connection_usage_by_score.csv", row.na
 write.csv(timeout_events, "LTU_timeout_events.csv", row.names = FALSE)
 write.csv(centrality_2025$player_centrality, "LTU_centrality_player.csv", row.names = FALSE)
 write.csv(centrality_2025$network_centralisation, "LTU_centrality_network.csv", row.names = FALSE)
+
+
+
+# eigenvector 
+
+all_teams <- unique(c(fixtures_df$team1, fixtures_df$team2))
+print(all_teams)
+length(all_teams)
+
+nrow(fixtures_df)  # total games in the whole season across all teams
+
+
+# inspect the raw structure of one game's competitor data to find the score field name
+str(fixtures_df$competitors[[1]])
+
+
+all_results <- fixtures_df %>%
+  mutate(
+    score1 = map_dbl(competitors, ~ as.numeric(.x$score[1])),
+    score2 = map_dbl(competitors, ~ as.numeric(.x$score[2])),
+    status1 = map_chr(competitors, ~ .x$resultStatus[1])
+  ) %>%
+  filter(!is.na(score1), !is.na(score2), status1 == "CONFIRMED") %>%
+  select(fixtureId, team1, team2, score1, score2, round, startTimeLocal) %>%
+  mutate(
+    winner = if_else(score1 > score2, team1, team2),
+    margin = abs(score1 - score2)
+  )
+
+nrow(all_results)
+print(all_results)
+
+# sanity check: does every team appear a sensible number of times?
+bind_rows(
+  all_results %>% select(team = team1),
+  all_results %>% select(team = team2)
+) %>% count(team, sort = TRUE)
+
+
+
+# team-level win-margin network and eigenvector centralization
+
+## ============================================================
+## LEAGUE-WIDE TEAM COMPETITIVENESS NETWORK (UBL 2025)
+## Analogous to the reference eigenvector-centralization charts:
+## edges = games played, weighted by margin of victory, directed
+## from loser -> winner (losing "sends" centrality/strength to
+## the winner, same logic as PageRank-style ranking systems).
+## ============================================================
+
+library(igraph)
+
+build_team_network <- function(all_results) {
+  # directed edge: loser -> winner, weight = margin of victory
+  # (a bigger blowout = a stronger signal of the winner's strength)
+  edges <- all_results %>%
+    mutate(
+      loser = if_else(winner == team1, team2, team1)
+    ) %>%
+    transmute(from = loser, to = winner, weight = margin)
+  
+  team_names <- unique(c(all_results$team1, all_results$team2))
+  
+  g <- graph_from_data_frame(edges, directed = TRUE, vertices = team_names)
+  E(g)$weight <- edges$weight
+  
+  g
+}
+
+compute_team_eigenvector <- function(all_results, season_label = "2025") {
+  g <- build_team_network(all_results)
+  
+  ec <- eigen_centrality(g, directed = TRUE, weights = E(g)$weight)$vector
+  
+  tibble(
+    season = season_label,
+    team = names(ec),
+    eigenvector_centralization = as.numeric(ec)
+  ) %>%
+    arrange(desc(eigenvector_centralization))
+}
+
+team_eigenvector_2025 <- compute_team_eigenvector(all_results)
+print(team_eigenvector_2025)
+
+
+## Plot, matching the style of your reference chart
+ggplot(team_eigenvector_2025, aes(
+  x = reorder(team, eigenvector_centralization),
+  y = eigenvector_centralization,
+  fill = eigenvector_centralization
+)) +
+  geom_col() +
+  coord_flip() +
+  scale_fill_distiller(palette = "RdBu", direction = 1) +
+  theme_classic(base_size = 14) +
+  labs(
+    title = "UBL Woman teams by eigenvector centralization (2025)",
+    x = "Team", y = "Eigenvector centralization", fill = NULL
+  )
+
+
+ubl_balance_2025 <- tibble(
+  season = "2025",
+  eigenvector_gini = gini_coefficient(team_eigenvector_2025$eigenvector_centralization)
+)
+ubl_balance_2025
+## meaning competitive imbalance - the league is dominated by a small handful of teams rather than being broadly competitive. 
+
+
+
+##### Man session 2025 #####
+
+pull_season_results <- function(fixtures_url, league_label) {
+  res <- GET(fixtures_url, add_headers("User-Agent" = "Mozilla/5.0"))
+  if (status_code(res) != 200) stop("Fixtures fetch failed: ", status_code(res))
+  
+  fixtures_data <- fromJSON(content(res, "text", encoding = "UTF-8"), flatten = TRUE)
+  
+  fixtures_df_out <- fixtures_data$data$fixtures %>%
+    mutate(
+      state = str_extract(link, "(?<=~w=f~).+"),
+      team1 = map_chr(competitors, ~ .x$name[1]),
+      team2 = map_chr(competitors, ~ .x$name[2])
+    )
+  
+  fixtures_df_out %>%
+    mutate(
+      score1 = map_dbl(competitors, ~ as.numeric(.x$score[1])),
+      score2 = map_dbl(competitors, ~ as.numeric(.x$score[2])),
+      status1 = map_chr(competitors, ~ .x$resultStatus[1])
+    ) %>%
+    filter(!is.na(score1), !is.na(score2), status1 == "CONFIRMED") %>%
+    select(fixtureId, team1, team2, score1, score2, round, startTimeLocal) %>%
+    mutate(
+      winner = if_else(score1 > score2, team1, team2),
+      margin = abs(score1 - score2),
+      league = league_label
+    )
+}
+
+## --- Fill in the men's fixtures URL once you have it ---
+url_men <- "https://embed-api.eui.connect.sportradar.com/v1/embed/303/fixtures?state=eJyrVipWslJQMk4zMkk1MjTUNbM0sNA1NEwz0E1KMTbVNTBPSUs2TDE1s0hNUtJRUMoBKU7N03X1U6oFALDFDrc"
+all_results_men <- pull_season_results(url_men, "UBL Men 2025")
+
+nrow(all_results_men)
+print(all_results_men)
+
+# sanity check: does UTAS even field a men's team, and are team counts sensible?
+bind_rows(
+  all_results_men %>% select(team = team1),
+  all_results_men %>% select(team = team2)
+) %>% count(team, sort = TRUE)
+
+
+compute_league_eigenvector <- function(results, league_label) {
+  g <- build_team_network(results)
+  ec <- eigen_centrality(g, directed = TRUE, weights = E(g)$weight)$vector
+  tibble(league = league_label, team = names(ec), eigenvector_centralization = as.numeric(ec)) %>%
+    arrange(desc(eigenvector_centralization))
+}
+
+team_eigenvector_men <- compute_league_eigenvector(all_results_men, "UBL Men 2025")
+print(team_eigenvector_men)
+
+
+## Plot, matching the style of your reference chart
+ggplot(team_eigenvector_men, aes(
+  x = reorder(team, eigenvector_centralization),
+  y = eigenvector_centralization,
+  fill = eigenvector_centralization
+)) +
+  geom_col() +
+  coord_flip() +
+  scale_fill_distiller(palette = "RdBu", direction = 1) +
+  theme_classic(base_size = 14) +
+  labs(
+    title = "UBL Men teams by eigenvector centralization (2025)",
+    x = "Team", y = "Eigenvector centralization", fill = NULL
+  )
+
+gini_men <- gini_coefficient(team_eigenvector_men$eigenvector_centralization)
+
+## Combined comparison table
+league_balance_comparison <- bind_rows(
+  tibble(league = "UBL Women 2025", gini = ubl_balance_2025$eigenvector_gini,
+         top_team = team_eigenvector_2025$team[1], top_score = team_eigenvector_2025$eigenvector_centralization[1]),
+  tibble(league = "UBL Men 2025", gini = gini_men,
+         top_team = team_eigenvector_men$team[1], top_score = team_eigenvector_men$eigenvector_centralization[1])
+)
+print(league_balance_comparison)
+
