@@ -21,6 +21,27 @@ parse_clock <- function(x) {
   mins * 60 + secs
 }
 
+extract_events <- function(d) {
+  pd <- d$data$periodData
+  
+  # New response structure
+  if (!is.null(pd) && "events" %in% names(pd)) {
+    events <- bind_rows(pd$events, .id = "quarter")
+    if (nrow(events) > 0) return(events)
+  }
+  
+  # Old response structure
+  if (!is.null(d$data$pbp)) {
+    events <- d$data$pbp |>
+      lapply(function(q) q$events) |>
+      bind_rows(.id = "quarter")
+    
+    if (nrow(events) > 0) return(events)
+  }
+  
+  NULL
+}
+
 # pull clean play-by-play for one fixture
 get_match_pbp <- function(fixture_state, base = "https://embed-api.eui.connect.sportradar.com/v1/embed/303") {
   
@@ -47,14 +68,12 @@ get_match_pbp <- function(fixture_state, base = "https://embed-api.eui.connect.s
   }
   data <- fromJSON(content(res2, "text", encoding = "UTF-8"), flatten = TRUE)
   
-  if (is.null(data$data$pbp)) {
-    warning("Still no pbp available for: ", fixture_state)
+  all_events <- extract_events(data)
+  
+  if (is.null(all_events) || nrow(all_events) == 0) {
+    warning("No events found for: ", fixture_state)
     return(NULL)
   }
-  
-  all_events <- data$data$pbp |>
-    lapply(\(quarter) quarter$events) |>
-    bind_rows(.id = "quarter")
   
   team_lookup <- data.frame(
     entityId = data$data$fixture$competitors$entityId,
@@ -93,8 +112,9 @@ fixtures_df <- fixtures_data$data$fixtures %>%
   )
 
 ## --- Pull LTU's full season play-by-play ---
+
 match_pick <- fixtures_df %>%
-  filter((team1 == "LTU") | (team2 == "LTU"))
+  filter(team1 == "LTU" | team2 == "LTU")
 
 LTU_pbp <- lapply(match_pick$state, function(s) {
   Sys.sleep(0.5)
@@ -1360,6 +1380,119 @@ static_network <- build_connection_network_plot(
 static_network
 
 
+# static_network for the presentation slide with player one, two, etc 
+build_connection_network_plot_presentation <- function(
+    ltu_connection, ltu_minutes, player_labels) {
+  
+  library(igraph)
+  library(ggraph)
+  library(dplyr)
+  library(scales)
+  library(grid)
+  
+  edges <- ltu_connection %>%
+    rename(
+      from = player_1,
+      to = player_2,
+      conn_score = connection_score
+    )
+  
+  nodes <- ltu_minutes %>%
+    rename(name = player_name) %>%
+    filter(name %in% union(edges$from, edges$to)) %>%
+    mutate(
+      label = unname(
+        player_labels[stringr::str_squish(name)]
+      )
+    )
+  
+  stopifnot(!anyNA(nodes$label))
+  
+  g <- graph_from_data_frame(
+    edges,
+    directed = FALSE,
+    vertices = nodes
+  )
+  
+  set.seed(123)
+  
+  ggraph(g, layout = "fr") +
+    geom_edge_link(
+      aes(
+        width = minutes_together,
+        colour = conn_score,
+        alpha = n_games_together
+      )
+    ) +
+    geom_node_point(
+      aes(size = total_minutes),
+      colour = "grey20"
+    ) +
+    geom_node_label(
+      aes(label = label),
+      repel = TRUE,
+      size = 4.2,
+      colour = "black",
+      fill = scales::alpha("white", 0.9),
+      label.padding = unit(0.15, "lines"),
+      label.size = 0
+    ) +
+    scale_edge_width(
+      range = c(0.4, 4),
+      name = "Minutes together"
+    ) +
+    scale_edge_colour_gradient2(
+      low = "firebrick",
+      mid = "grey80",
+      high = "steelblue",
+      midpoint = 0,
+      name = "Connection score"
+    ) +
+    scale_edge_alpha(
+      range = c(0.25, 0.9),
+      name = "Games together"
+    ) +
+    scale_size_continuous(
+      range = c(5, 15),
+      name = "Player minutes"
+    ) +
+    theme_void() +
+    labs(
+      subtitle = paste(
+        "Edge width = minutes shared |",
+        "Blue = positive connection |",
+        "Red = negative connection"
+      )
+    ) +
+    theme(
+      plot.title = element_text(size = 18, face = "bold"),
+      plot.subtitle = element_text(size = 11),
+      plot.margin = margin(20, 30, 20, 30),
+      legend.title = element_text(size = 12),
+      legend.text = element_text(size = 11)
+    )
+}
+
+static_network_presentation <- build_connection_network_plot_presentation(
+  ltu_connection,
+  ltu_minutes,
+  player_labels
+)
+
+static_network_presentation
+
+
+
+
+ggsave(
+  "LTU_connection_network_presentation.png",
+  static_network_presentation,
+  width = 12,
+  height = 7,
+  dpi = 300,
+  bg = "white"
+)
+
 
 ## Of the 73 player pairs that shared at least 15 minutes across at least two games, 
 ## 35 showed stable positive connection scores, 28 showed stable negative scores and 10 were uncertain. 
@@ -1951,4 +2084,3 @@ league_balance_comparison <- bind_rows(
          top_team = team_eigenvector_men$team[1], top_score = team_eigenvector_men$eigenvector_centralization[1])
 )
 print(league_balance_comparison)
-
