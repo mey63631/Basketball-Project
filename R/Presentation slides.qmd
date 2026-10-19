@@ -21,8 +21,37 @@ execute:
 library(dplyr); library(tidyr); library(ggplot2); library(stringr); library(scales); library(readr)
 theme_set(theme_minimal(base_size = 18))
 teal <- "#3F8F84"; orange <- "#E07830"
+
 pairs <- read_csv("LTU_final_pair_connection_table.csv") |>
   mutate(across(c(player_1, player_2), str_squish))
+
+cent <- read_csv("LTU_centrality_player.csv") |>
+  mutate(player_name = str_squish(player_name))
+
+
+# One consistent label per player across both datasets
+player_names <- sort(unique(c(
+  pairs$player_1,
+  pairs$player_2,
+  cent$player_name
+)))
+player_names <- player_names[
+  !is.na(player_names) & nzchar(player_names)
+]
+
+player_labels <- setNames(
+  paste("Player", seq_along(player_names)),
+  player_names
+)
+
+pairs <- pairs |>
+  mutate(
+    player_1 = unname(player_labels[player_1]),
+    player_2 = unname(player_labels[player_2])
+  )
+
+cent <- cent |>
+  mutate(player_name = unname(player_labels[player_name]))
 ```
 
 ## Points and plus-minus can't show who plays well *together*
@@ -49,57 +78,135 @@ Which LTU pairings create more value than their individual ratings would predict
 (45 sec) Say clearly that play-by-play is LTU's games only. The other teams appear as opponents.
 :::
 
-## From raw events to a pair connection score
+## From raw events to a connection score
 
 ```{r}
+#| echo: false
 #| fig-width: 12
-#| fig-height: 2.8
-#| out-width: "100%"
+#| fig-height: 2.5
+#| out-width: "95%"
+#| fig-align: center
+
 steps <- data.frame(
   id = 1:5,
   title = c("Lineups", "Stints", "RAPM", "Pair score", "Stability"),
-  line1 = c("Reconstruct", "Same-lineup", "Ridge model", "Actual minus", "Leave one game"),
-  line2 = c("on-court five", "intervals", "per stint", "predicted", "out, rescore"),
-  group = c(rep("Data preparation", 2), rep("Modelling and validation", 3))
+  line1 = c("Reconstruct", "Same-lineup", "Ridge model",
+            "Actual minus", "Leave one game"),
+  line2 = c("on-court five", "intervals", "per stint",
+            "predicted", "out, rescore"),
+  group = c(rep("Data preparation", 2),
+            rep("Modelling and validation", 3))
 )
-box_w <- 1.6; gap <- 0.5
+
+box_w <- 1.8
+gap <- 0.4
+
 steps$xmin <- (steps$id - 1) * (box_w + gap)
 steps$xmax <- steps$xmin + box_w
 steps$xmid <- (steps$xmin + steps$xmax) / 2
-arrows <- data.frame(x = steps$xmax[1:4] + 0.05, xend = steps$xmin[2:5] - 0.05, y = 1, yend = 1)
+
+arrows <- data.frame(
+  x = steps$xmax[1:4] + 0.04,
+  xend = steps$xmin[2:5] - 0.04,
+  y = 0.75,
+  yend = 0.75
+)
+
 ggplot() +
-  geom_rect(data = steps, aes(xmin = xmin, xmax = xmax, ymin = 0, ymax = 2, fill = group)) +
-  geom_text(data = steps, aes(x = xmid, y = 1.5, label = title), colour = "white", fontface = "bold", size = 7) +
-  geom_text(data = steps, aes(x = xmid, y = 1.0, label = line1), colour = "white", size = 5) +
-  geom_text(data = steps, aes(x = xmid, y = 0.65, label = line2), colour = "white", size = 5) +
-  geom_segment(data = arrows, aes(x = x, xend = xend, y = y, yend = yend),
-               arrow = arrow(length = unit(0.2, "cm"), type = "closed"), colour = "grey40") +
-  scale_fill_manual(values = c("Data preparation" = teal, "Modelling and validation" = orange), name = NULL) +
-  coord_cartesian(xlim = c(-0.1, 10.1), ylim = c(-0.1, 2.1)) +
-  theme_void(base_size = 16) + theme(legend.position = "bottom")
+  geom_rect(
+    data = steps,
+    aes(xmin = xmin, xmax = xmax,
+        ymin = 0, ymax = 1.5, fill = group)
+  ) +
+  geom_text(
+    data = steps,
+    aes(x = xmid, y = 1.12, label = title),
+    colour = "white", fontface = "bold", size = 5.5
+  ) +
+  geom_text(
+    data = steps,
+    aes(x = xmid, y = 0.72, label = line1),
+    colour = "white", size = 4
+  ) +
+  geom_text(
+    data = steps,
+    aes(x = xmid, y = 0.38, label = line2),
+    colour = "white", size = 4
+  ) +
+  geom_segment(
+    data = arrows,
+    aes(x = x, xend = xend, y = y, yend = yend),
+    arrow = grid::arrow(
+      length = grid::unit(0.16, "cm"),
+      type = "closed"
+    ),
+    colour = "grey40"
+  ) +
+  scale_fill_manual(
+    values = c(
+      "Data preparation" = teal,
+      "Modelling and validation" = orange
+    ),
+    name = NULL
+  ) +
+  coord_cartesian(
+    xlim = c(-0.1, max(steps$xmax) + 0.1),
+    ylim = c(-0.05, 1.55),
+    expand = FALSE
+  ) +
+  theme_void(base_size = 13) +
+  theme(
+    legend.position = "bottom",
+    legend.key.size = grid::unit(0.35, "cm"),
+    legend.margin = margin(0, 0, 0, 0),
+    plot.margin = margin(0, 0, 0, 0)
+  )
 ```
 
-$$y_s=\beta_0+\sum_p \beta_p x_{sp}+\sum_o \delta_o z_{so}+\varepsilon_s \qquad C_{ij}=\frac{\sum_{s\ni i,j} d_s\,(y_s-\hat y_s)}{\sum_{s\ni i,j} d_s}$$
+::: {style="font-size: 0.75em;"}
 
-::: {.smaller}
-$y_s$: net points per minute in stint $s$; $x_{sp}=1$ if player $p$ is on court; $z_{so}$: opponent team; $d_s$: stint length. Ridge fit, weighted by $d_s$. $C_{ij}>0$: LTU beat the full-lineup prediction while $i$ and $j$ shared the court.
+**Lineup prediction**
+$$
+y_s = \beta_0 + \sum_p \beta_p x_{sp}
+      + \sum_o \delta_o z_{so} + \varepsilon_s
+$$
+
+**Connection score**
+$$
+C_{ij} =
+\frac{\sum_{s \ni i,j} d_s (y_s - \hat{y}_s)}
+     {\sum_{s \ni i,j} d_s}
+$$
+
 :::
 
 ::: notes
-(1.5 min) Walk left to right, one sentence per box. Then the equation: the pair score is just the average prediction error over stints where both players were on court. Per minute, not per possession.
+Walk left to right, one sentence per box.
+
+The model predicts net points per minute using the players on court
+and the opponent team.
+
+The connection score averages the prediction errors from stints
+where both players played, weighted by stint length.
+
+A positive score means the team performed better than predicted
+during their shared minutes. It is an adjusted association,
+not proof of personal chemistry.
 :::
 
 ## Some pairs outperform what their lineups predict
 
 ```{r}
 #| fig-width: 11
-#| fig-height: 5.4
+#| fig-height: 5.6
 #| out-width: "100%"
+#| fig-align: center
 plot_df <- bind_rows(
   slice_max(pairs, connection_score, n = 5, with_ties = FALSE),
   slice_min(pairs, connection_score, n = 5, with_ties = FALSE)
 ) |>
-  mutate(label = sprintf("%s + %s\n%.0f min, %d games", player_1, player_2, minutes_together, n_games_together),
+    mutate(label = sprintf("%s + %s (%.0f min, %d games)", player_1, player_2,
+                         minutes_together, n_games_together),
          label = reorder(label, connection_score))
 ggplot(plot_df, aes(connection_score, label, fill = stability)) +
   geom_col() + geom_vline(xintercept = 0) +
@@ -110,47 +217,29 @@ ggplot(plot_df, aes(connection_score, label, fill = stability)) +
   theme(legend.position = "bottom")
 ```
 
-Top and bottom 5 of 73 pairs (at least 15 minutes, 2 games). Emilia Marinkovic is in 3 of the top 5. An association, not proof of chemistry.
+Top and bottom 5 of 73 pairs (at least 15 minutes, 2 games).
+An association, not proof of chemistry.
 
 ::: notes
 (1.5 min) Read one top pair and one bottom pair with minutes and games. Mention the early headline pair that dropped out after stricter filters: that is why the filters exist.
 :::
 
-## The connection network: who clicks with whom
+## The connection network:
 
 ```{r}
-#| out-width: "75%"
-knitr::include_graphics("LTU_connection_network.png")
+#| echo: false
+#| fig-width: 10
+#| fig-height: 6
+#| out-width: "100%"
+#| fig-align: center
+
+knitr::include_graphics("LTU_connection_network_presentation.png")
 ```
 
 ::: notes
 (1 min) Blue positive, red negative, thickness is shared minutes, node size is total minutes. Point to one dense blue cluster. Do not over-explain.
 :::
 
-## Bridging is concentrated in Vitale and Hii, mostly a minutes effect
-
-::: {.columns}
-::: {.column width="55%"}
-```{r}
-#| fig-width: 7
-#| fig-height: 5.5
-cent <- read.csv("LTU_centrality_player.csv") |> mutate(player_name = str_squish(player_name))
-ggplot(cent, aes(weighted_betweenness, reorder(player_name, weighted_betweenness), fill = weighted_strength)) +
-  geom_col() +
-  scale_fill_gradient(low = "grey85", high = teal, name = "Shared minutes") +
-  labs(x = "Weighted betweenness", y = NULL)
-```
-:::
-::: {.column width="45%"}
-- 112 of 120 possible pairs shared the court
-- All 8 gaps involve four players with only 3 to 4 games and under 53 minutes
-- Minutes are spread fairly evenly (Gini 0.27), bridging is not (Gini 0.88)
-:::
-:::
-
-::: notes
-(1 min) Betweenness looks like tactical importance but is mostly exposure: the most-used players are the likeliest link to the rarely used ones.
-:::
 
 ## LTU mostly led comfortably or played close games
 
@@ -234,7 +323,7 @@ UTAS leads the women but is 4th among the men, so strength is competition-specif
 
 ## Takeaways
 
-1. Pair scores flag combinations worth a closer look, for example those involving Emilia Marinkovic
+1. Pair scores flag combinations worth a closer look
 2. The rotation is broad, and the bridging role mostly follows minutes
 3. Held-out testing found no evidence the scores persist, so treat them as hypotheses for coaches
 
@@ -249,6 +338,31 @@ Limits: one season, 8 games, minutes rather than possessions. Next: more games a
 ## Questions {.center}
 
 # Backup {visibility="uncounted"}
+
+## Bridging is concentrated in two players, mostly a minutes effect
+
+::: {.columns}
+::: {.column width="55%"}
+```{r}
+#| fig-width: 7
+#| fig-height: 5.5
+
+ggplot(cent, aes(weighted_betweenness, reorder(player_name, weighted_betweenness), fill = weighted_strength)) +
+  geom_col() +
+  scale_fill_gradient(low = "grey85", high = teal, name = "Shared minutes") +
+  labs(x = "Weighted betweenness", y = NULL)
+```
+:::
+::: {.column width="45%"}
+- 112 of 120 possible pairs shared the court
+- All 8 gaps involve four players with only 3 to 4 games and under 53 minutes
+- Minutes are spread fairly evenly (Gini 0.27), bridging is not (Gini 0.88)
+:::
+:::
+
+::: notes
+(1 min) Betweenness looks like tactical importance but is mostly exposure: the most-used players are the likeliest link to the rarely used ones.
+:::
 
 ## Stability and data quality
 
