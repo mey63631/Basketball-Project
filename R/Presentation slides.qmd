@@ -260,8 +260,8 @@ ggplot(ss, aes(score_state, share, fill = score_state)) +
 ```
 :::
 ::: {.column width="45%"}
-- Clutch window: 14 stints, 9.4 minutes, 3 games, so descriptive only
-- Only 3 five-player lineups had 5+ minutes across 2+ games
+- Clutch window (last 5 minutes, within 5 points): 14 stints, 9.4 minutes, 3 games, so descriptive only
+- Only 3 five-player lineups had 5+ minutes in the same game situtation across 2+ games
 :::
 :::
 
@@ -284,7 +284,7 @@ ggplot(pg, aes(y = game)) +
   theme(legend.position = "bottom")
 ```
 
-Scores fitted on 7 games, tested on the 8th: RMSE 2.30 vs 2.31, better in 4 of 8 games, permutation p = 0.34.
+Scores fitted on 7 games, tested on the 8th: RMSE 2.30 vs 2.30, better in 4 of 8 games, permutation p = 0.22.
 
 ::: notes
 (1 min) This is the honest test. The scores describe the games they came from; no evidence yet they persist. A null result with 225 stints and a noisy outcome is expected, not a failure.
@@ -324,7 +324,7 @@ UTAS leads the women but is 4th among the men, so strength is competition-specif
 ## Takeaways
 
 1. Pair scores flag combinations worth a closer look
-2. The rotation is broad, and the bridging role mostly follows minutes
+2. The rotation is broadly connected; bridging sits with two heavily used players
 3. Held-out testing found no evidence the scores persist, so treat them as hypotheses for coaches
 
 ::: {.smaller}
@@ -339,7 +339,7 @@ Limits: one season, 8 games, minutes rather than possessions. Next: more games a
 
 # Backup {visibility="uncounted"}
 
-## Bridging is concentrated in two players, mostly a minutes effect
+## Bridging is concentrated in two heavily used players
 
 ::: {.columns}
 ::: {.column width="55%"}
@@ -381,3 +381,59 @@ weighted.mean(stint_resid, w = duration_sec)
 
 - Strength: total shared minutes. Betweenness: lies on short paths between others (more minutes = shorter distance)
 - Eigenvector: connected to well-connected players. Gini: concentration, 0 equal to 1 concentrated
+
+## 
+**Lineup prediction**
+$$
+y_s = \beta_0 + \sum_p \beta_p x_{sp}
+      + \sum_o \delta_o z_{so} + \varepsilon_s
+$$
+
+**Connection score**
+$$
+C_{ij} =
+\frac{\sum_{s \ni i,j} d_s (y_s - \hat{y}_s)}
+     {\sum_{s \ni i,j} d_s}
+$$
+
+$y_s$: net points per minute in stint $s$; $x_{sp}$: player $p$ on court; $z_{so}$: opponent; $d_s$: stint length; $\hat{y}_s$: model prediction
+
+
+
+## How team eigenvector centrality is calculated
+
+::: {style="font-size: 0.75em;"}
+
+- Each node is a team; arrows point **loser → winner**.
+- Edge weights are winning margins.
+- Beating highly central teams contributes more to the score.
+
+::: {.columns}
+::: {.column width="45%"}
+
+$$
+c_i = \frac{1}{\lambda}\sum_j A_{ji}c_j
+$$
+
+:::
+::: {.column width="55%"}
+
+| Symbol | Meaning |
+|--------|---------|
+| $c_i$ | Centrality of team $i$ |
+| $c_j$ | Centrality of defeated team $j$ |
+| $A_{ji}$ | Total winning margin on arrows $j \to i$ |
+| $\lambda$ | Associated eigenvalue |
+
+:::
+:::
+
+**Scaling:** highest score = 1.  
+**Gini:** measures concentration of the scores across teams.
+
+:::
+
+::: notes
+Centrality is not a win percentage or official league position.
+Lambda here is an eigenvalue, not the RAPM ridge penalty.
+:::
