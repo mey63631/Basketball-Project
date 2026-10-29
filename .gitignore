@@ -1,5 +1,7 @@
 data/raw/*
 !data/raw/.gitkeep
+
+# R and RStudio local files
 .Rhistory
 .RData
 .Rproj.user/
