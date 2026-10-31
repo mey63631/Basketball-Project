@@ -1,0 +1,74 @@
+"player_1","player_2","minutes_together","n_games_together","net_per_minute","expected_net_per_minute","connection_score","stability","n_loo_estimates","proportion_positive","min_loo_score","max_loo_score"
+"Talia D'Agostino","Emilia Marinkovic",24.97,3,1.28,0.17,1.12,"Stable positive",7,1,0.73,1.17
+"Eleanor Bollands","Emilia Marinkovic",17.02,3,1.23,0.17,1.07,"Stable positive",5,1,0.9,1.12
+"Jaida  Reid","Nicoletta  Karakiklas",15.22,2,1.18,0.17,1.02,"Stable positive",6,1,0.85,1.08
+"Nicoletta  Karakiklas","Alana  Poulton",15.17,2,0.92,0.17,0.76,"Stable positive",6,1,0.59,0.82
+"Claudia  Hii","Emilia Marinkovic",59.38,4,0.89,0.17,0.73,"Stable positive",8,1,0.56,0.87
+"Georgia  Holland","Kayla  Vitale",19.97,3,0.85,0.17,0.69,"Stable positive",5,1,0.52,0.74
+"Emilia Marinkovic","Kayla  Vitale",35.72,3,0.84,0.17,0.67,"Stable positive",8,1,0.41,0.9
+"Emilia Marinkovic","Sarah  Carr",34.6,4,0.84,0.17,0.67,"Stable positive",8,1,0.51,0.77
+"Anastasia Gak","Nicoletta  Karakiklas",28.97,2,0.83,0.17,0.66,"Stable positive",6,1,0.5,0.72
+"Claudia  Hii","Nicoletta  Karakiklas",24.93,2,0.8,0.17,0.64,"Stable positive",6,1,0.47,0.7
+"Talia D'Agostino","Eleanor Bollands",50.92,4,0.79,0.17,0.62,"Stable positive",8,1,0.34,1.14
+"Georgia  Holland","Sarah  Stafford",23.13,2,0.78,0.17,0.61,"Stable positive",6,1,0.45,0.67
+"Coco Erin","Sarah  Carr",15.05,2,0.73,0.17,0.57,"Stable positive",6,1,0.4,0.62
+"Eleanor Bollands","Tahlia Leeson",19.33,2,0.72,0.17,0.56,"Stable positive",6,1,0.39,0.62
+"Emilia Marinkovic","Georgia  Holland",15.08,2,0.66,0.17,0.5,"Stable positive",6,1,0.33,0.56
+"Anastasia Gak","Georgia  Holland",25.18,3,0.64,0.17,0.47,"Stable positive",7,1,0.3,0.91
+"Anastasia Gak","Claudia  Hii",31.87,3,0.56,0.17,0.4,"Stable positive",8,1,0.23,0.59
+"Georgia  Holland","Tahlia Leeson",21.9,2,0.55,0.17,0.38,"Stable positive",6,1,0.22,0.44
+"Sarah  Carr","Tahlia Leeson",41.38,4,0.53,0.17,0.37,"Stable positive",8,1,0.07,0.9
+"Emilia Marinkovic","Alana  Poulton",20.9,2,0.53,0.17,0.36,"Stable positive",6,1,0.2,0.42
+"Claudia  Hii","Talia D'Agostino",41.15,4,0.51,0.17,0.35,"Stable positive",8,0.88,-0.01,1
+"Alana  Poulton","Sarah  Stafford",23.95,3,0.5,0.17,0.34,"Stable positive",7,1,0.3,0.56
+"Anastasia Gak","Emilia Marinkovic",20.15,2,0.5,0.17,0.33,"Stable positive",6,1,0.17,0.39
+"Claudia  Hii","Tahlia Leeson",29.83,2,0.47,0.17,0.3,"Stable positive",6,1,0.27,0.36
+"Georgia  Holland","Sarah  Carr",17.45,3,0.46,0.17,0.29,"Stable positive",6,1,0.13,0.43
+"Emilia Marinkovic","Jaida  Reid",35.17,4,0.43,0.17,0.26,"Stable positive",8,1,0.03,0.44
+"Claudia  Hii","Sarah  Carr",43.53,5,0.41,0.17,0.25,"Stable positive",8,0.88,-0.09,0.51
+"Claudia  Hii","Eleanor Bollands",36.4,4,0.38,0.17,0.22,"Stable positive",8,0.88,-0.09,0.71
+"Eleanor Bollands","Kayla  Vitale",59.97,5,0.38,0.17,0.22,"Stable positive",8,1,0.01,0.4
+"Kayla  Vitale","Coco Erin",27.25,3,0.37,0.17,0.2,"Stable positive",7,0.86,-0.06,0.26
+"Coco Erin","Alana  Poulton",30.6,3,0.36,0.17,0.19,"Stable positive",7,1,0.16,0.47
+"Jaida  Reid","Coco Erin",18.15,2,0.33,0.17,0.17,"Stable positive",6,1,0.13,0.22
+"Kayla  Vitale","Tahlia Leeson",47.42,3,0.3,0.17,0.13,"Uncertain",8,0.75,-0.1,0.4
+"Jaida  Reid","Alana  Poulton",28.25,4,0.28,0.17,0.12,"Stable positive",7,1,0.09,0.46
+"Anastasia Gak","Sarah  Stafford",18.27,2,0.27,0.17,0.11,"Stable positive",6,0.83,-0.06,0.17
+"Claudia  Hii","Kayla  Vitale",59.22,5,0.25,0.17,0.09,"Uncertain",8,0.75,-0.11,0.26
+"Sarah  Stafford","Tahlia Leeson",16.03,3,0.25,0.17,0.08,"Stable positive",5,1,0.05,0.14
+"Talia D'Agostino","Emily  Maltezos",53.52,3,0.21,0.17,0.04,"Uncertain",8,0.62,-0.13,0.32
+"Eleanor Bollands","Sarah  Carr",29.98,5,0.2,0.17,0.03,"Uncertain",8,0.75,-0.34,0.54
+"Talia D'Agostino","Kayla  Vitale",99.78,6,0.18,0.17,0.02,"Uncertain",8,0.5,-0.15,0.2
+"Eleanor Bollands","Jaida  Reid",47.17,5,0.17,0.17,0,"Uncertain",8,0.62,-0.21,0.25
+"Talia D'Agostino","Sarah  Carr",68.38,5,0.16,0.17,0,"Uncertain",8,0.62,-0.17,0.23
+"Jaida  Reid","Tahlia Leeson",45.5,3,0.13,0.17,-0.03,"Uncertain",8,0.5,-0.3,0.05
+"Talia D'Agostino","Nicoletta  Karakiklas",17.1,3,0.12,0.17,-0.05,"Stable negative",5,0.2,-0.21,0.01
+"Talia D'Agostino","Coco Erin",20.98,2,0.1,0.17,-0.07,"Stable negative",6,0,-0.24,-0.01
+"Talia D'Agostino","Sarah  Stafford",27.43,4,0.07,0.17,-0.09,"Stable negative",7,0.14,-0.26,0.1
+"Claudia  Hii","Alana  Poulton",32.55,3,0.06,0.17,-0.1,"Stable negative",8,0.12,-0.26,0.01
+"Emily  Maltezos","Coco Erin",16.87,2,0.06,0.17,-0.11,"Stable negative",6,0,-0.14,-0.05
+"Alana  Steele","Sarah  Stafford",21.6,3,0.05,0.17,-0.12,"Stable negative",6,0,-0.28,-0.07
+"Eleanor Bollands","Emily  Maltezos",47.43,4,0.04,0.17,-0.12,"Uncertain",8,0.25,-0.43,0.07
+"Anastasia Gak","Alana  Poulton",21.25,3,0,0.17,-0.17,"Uncertain",7,0.29,-0.33,0.16
+"Jaida  Reid","Sarah  Stafford",56.32,6,0,0.17,-0.17,"Stable negative",8,0,-0.59,-0.01
+"Emily  Maltezos","Tahlia Leeson",22.9,2,-0.04,0.17,-0.21,"Stable negative",6,0,-0.24,-0.15
+"Talia D'Agostino","Alana  Poulton",20.72,2,-0.05,0.17,-0.21,"Stable negative",6,0,-0.38,-0.15
+"Talia D'Agostino","Jaida  Reid",63.87,5,-0.08,0.17,-0.24,"Stable negative",8,0,-0.41,-0.14
+"Kayla  Vitale","Sarah  Carr",103.92,6,-0.09,0.17,-0.25,"Stable negative",8,0,-0.51,-0.15
+"Emily  Maltezos","Kayla  Vitale",91.53,4,-0.12,0.17,-0.29,"Stable negative",8,0.12,-0.62,0.06
+"Alana  Steele","Kayla  Vitale",16.42,3,-0.12,0.17,-0.29,"Stable negative",5,0,-0.45,-0.24
+"Jaida  Reid","Kayla  Vitale",102.1,6,-0.16,0.17,-0.32,"Stable negative",8,0,-0.37,-0.24
+"Claudia  Hii","Sarah  Stafford",34.1,5,-0.21,0.17,-0.37,"Stable negative",8,0,-1.31,-0.01
+"Kayla  Vitale","Alana  Poulton",38.47,4,-0.21,0.17,-0.37,"Stable negative",8,0,-0.65,-0.22
+"Claudia  Hii","Jaida  Reid",78.38,6,-0.22,0.17,-0.38,"Stable negative",8,0,-0.49,-0.27
+"Emily  Maltezos","Sarah  Carr",66.48,4,-0.23,0.17,-0.39,"Stable negative",8,0.12,-0.94,0.05
+"Kayla  Vitale","Sarah  Stafford",55.03,5,-0.24,0.17,-0.4,"Stable negative",8,0,-0.59,-0.18
+"Alana  Poulton","Tahlia Leeson",29.65,4,-0.3,0.17,-0.47,"Stable negative",8,0,-0.59,-0.37
+"Jaida  Reid","Sarah  Carr",69.38,6,-0.42,0.17,-0.58,"Stable negative",8,0,-0.7,-0.5
+"Coco Erin","Tahlia Leeson",18.82,3,-0.43,0.17,-0.59,"Stable negative",6,0,-0.66,-0.53
+"Talia D'Agostino","Tahlia Leeson",20.63,2,-0.44,0.17,-0.6,"Stable negative",6,0,-0.77,-0.54
+"Alana  Poulton","Sarah  Carr",26.08,5,-0.5,0.17,-0.66,"Stable negative",8,0,-1.07,-0.24
+"Emily  Maltezos","Jaida  Reid",46.82,3,-0.66,0.17,-0.83,"Stable negative",8,0,-1.05,-0.58
+"Claudia  Hii","Emily  Maltezos",17.55,3,-0.74,0.17,-0.91,"Stable negative",5,0,-0.91,-0.85
+"Emily  Maltezos","Sarah  Stafford",33.8,3,-0.98,0.17,-1.14,"Stable negative",8,0,-1.65,-0.95
+"Sarah  Carr","Sarah  Stafford",15.57,4,-1.28,0.17,-1.45,"Stable negative",4,0,-1.45,-1.4

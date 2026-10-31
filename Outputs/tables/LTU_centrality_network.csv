@@ -1,0 +1,2 @@
+"network","n_players","n_edges","network_density","mean_weighted_strength","strength_cv","strength_gini","weighted_betweenness_gini","freeman_betweenness_centralisation"
+"LTU 2025",16,112,0.933333333333333,381.729166666667,0.492582256761704,0.267211291819025,0.880514705882353,0.00175333661047947
