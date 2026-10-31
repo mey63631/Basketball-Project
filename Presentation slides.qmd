@@ -22,10 +22,10 @@ library(dplyr); library(tidyr); library(ggplot2); library(stringr); library(scal
 theme_set(theme_minimal(base_size = 18))
 teal <- "#3F8F84"; orange <- "#E07830"
 
-pairs <- read_csv("outputs/tables/LTU_final_pair_connection_table.csv") |>
+pairs <- read_csv("Outputs/tables/LTU_final_pair_connection_table.csv") |>
   mutate(across(c(player_1, player_2), str_squish))
 
-cent <- read_csv("outputs/tables/LTU_centrality_player.csv") |>
+cent <- read_csv("Outputs/tables/LTU_centrality_player.csv") |>
   mutate(player_name = str_squish(player_name))
 
 
@@ -248,7 +248,7 @@ knitr::include_graphics("Figures/LTU_connection_network_presentation.png")
 ```{r}
 #| fig-width: 7
 #| fig-height: 5
-ss <- read.csv("outputs/tables/LTU_score_state_coverage.csv") |>
+ss <- read.csv("Outputs/tables/LTU_score_state_coverage.csv") |>
   mutate(share = total_minutes / sum(total_minutes),
          score_state = factor(score_state, levels = c("Leading by 6+", "Within 5 points", "Trailing by 6+")))
 ggplot(ss, aes(score_state, share, fill = score_state)) +
@@ -274,7 +274,7 @@ ggplot(ss, aes(score_state, share, fill = score_state)) +
 ```{r}
 #| fig-width: 9
 #| fig-height: 4.6
-pg <- read.csv("outputs/tables/LTU_prediction_per_game.csv") |> mutate(game = factor(row_number()))
+pg <- read.csv("Outputs/tables/LTU_prediction_per_game.csv") |> mutate(game = factor(row_number()))
 ggplot(pg, aes(y = game)) +
   geom_segment(aes(x = rmse_baseline, xend = rmse_enhanced, yend = game), colour = "grey60") +
   geom_point(aes(x = rmse_baseline, colour = "Baseline"), size = 4) +
@@ -303,14 +303,14 @@ bar_team <- function(df, ttl) {
     scale_fill_manual(values = c(`TRUE` = orange, `FALSE` = teal)) +
     labs(title = ttl, x = "Eigenvector centrality", y = NULL)
 }
-bar_team(read.csv("outputs/tables/LTU_team_eigenvector_women.csv"), "Women: Gini 0.53, UTAS leads")
+bar_team(read.csv("Outputs/tables/LTU_team_eigenvector_women.csv"), "Women: Gini 0.53, UTAS leads")
 ```
 :::
 ::: {.column width="50%"}
 ```{r}
 #| fig-width: 6
 #| fig-height: 5
-bar_team(read.csv("outputs/tables/LTU_team_eigenvector_men.csv"), "Men: Gini 0.57, UON leads")
+bar_team(read.csv("Outputs/tables/LTU_team_eigenvector_men.csv"), "Men: Gini 0.57, UON leads")
 ```
 :::
 :::
