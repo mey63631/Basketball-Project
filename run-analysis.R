@@ -1,7 +1,10 @@
+# Seed stochastic calculations for repeatable runs in the same environment.
+set.seed(2025)
+
 # Run the LTU basketball analysis ----
-# Open Basketball_Project.Rproj, then run source("run-analysis.R").
+# Open Basketball-Project.Rproj, then run source("run-analysis.R").
 # The scripts expect paths relative to the project root, not the R/ folder.
-# Team and league scripts download live data; this may change later results.
+# Saved inputs are used by default. See REPRODUCIBILITY.md for optional refresh.
 
 scripts <- c(
   "R/LTU-team.R",

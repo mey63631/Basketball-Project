@@ -1,7 +1,7 @@
 # LTU women's basketball: season analysis
 # Run from the project root with source("R/LTU-team.R").
 # This prepares the objects used by prediction, per-game networks and league comparison.
-# The main workflow still downloads the live feed, as in the original script.
+# Saved inputs are used by default; downloading updated inputs is optional.
 
 # 1. Packages and settings ----
 
@@ -56,28 +56,28 @@ parse_clock <- function(x) {
 # Read either event structure returned by the feed.
 extract_events <- function(d) {
   pd <- d$data$periodData
-
+  
   # New response structure
   if (!is.null(pd) && "events" %in% names(pd)) {
     events <- bind_rows(pd$events, .id = "quarter")
     if (nrow(events) > 0) return(events)
   }
-
+  
   # Old response structure
   if (!is.null(d$data$pbp)) {
     events <- d$data$pbp |>
       lapply(function(q) q$events) |>
       bind_rows(.id = "quarter")
-
+    
     if (nrow(events) > 0) return(events)
   }
-
+  
   NULL
 }
 
 # Download one fixture and return its event table. 
 get_match_pbp <- function(fixture_state, base = "https://embed-api.eui.connect.sportradar.com/v1/embed/303") {
-
+  
   url1 <- paste0(base, "/fixture_detail?state=", fixture_state)
   res1 <- tryCatch(GET(url1, add_headers("User-Agent" = "Mozilla/5.0")), error = function(e) NULL)
   if (is.null(res1) || status_code(res1) != 200) {
@@ -85,14 +85,14 @@ get_match_pbp <- function(fixture_state, base = "https://embed-api.eui.connect.s
     return(NULL)
   }
   data1 <- fromJSON(content(res1, "text", encoding = "UTF-8"), flatten = TRUE)
-
+  
   pbp_tab <- data1$data$tabs[data1$data$tabs$label == "Play By Play", ]
   if (nrow(pbp_tab) == 0) {
     warning("No Play By Play tab found for: ", fixture_state)
     return(NULL)
   }
   pbp_state <- str_extract(pbp_tab$link, "(?<=~w=f~).+")
-
+  
   url2 <- paste0(base, "/fixture_detail?state=", pbp_state)
   res2 <- tryCatch(GET(url2, add_headers("User-Agent" = "Mozilla/5.0")), error = function(e) NULL)
   if (is.null(res2) || status_code(res2) != 200) {
@@ -100,19 +100,19 @@ get_match_pbp <- function(fixture_state, base = "https://embed-api.eui.connect.s
     return(NULL)
   }
   data <- fromJSON(content(res2, "text", encoding = "UTF-8"), flatten = TRUE)
-
+  
   all_events <- extract_events(data)
-
+  
   if (is.null(all_events) || nrow(all_events) == 0) {
     warning("No events found for: ", fixture_state)
     return(NULL)
   }
-
+  
   team_lookup <- data.frame(
     entityId = data$data$fixture$competitors$entityId,
     team     = data$data$fixture$competitors$name
   )
-
+  
   all_events %>%
     left_join(team_lookup, by = "entityId") %>%
     mutate(
@@ -202,31 +202,31 @@ build_stints <- function(
 ) {
   all_stints <- list()
   n_quarter_flags <- 0
-
+  
   pbp_df <- pbp_df %>%
     mutate(.orig_order = row_number())
-
+  
   fixture_ids <- unique(pbp_df$fixtureId)
-
+  
   for (fid in fixture_ids) {
     game_df <- pbp_df %>%
       filter(fixtureId == fid) %>%
       arrange(period, desc(clock_seconds), .orig_order) %>%
       mutate(is_sub = action == "substitution")
-
+    
     teams <- unique(na.omit(game_df$team))
-
+    
     if (length(teams) != 2) {
       next
     }
-
+    
     team_a <- teams[1]
     team_b <- teams[2]
-
+    
     first_period <- min(game_df$period)
     period1_df <- game_df %>%
       filter(period == first_period)
-
+    
     lineup <- list()
     lineup[[team_a]] <- get_starting_lineup(
       period1_df,
@@ -236,37 +236,37 @@ build_stints <- function(
       period1_df,
       team_b
     )
-
+    
     # Points scored during the current stint.
     points <- setNames(c(0, 0), c(team_a, team_b))
-
+    
     # Persistent game score. Unlike `points`, this is never reset.
     cumulative_points <- setNames(
       c(0, 0),
       c(team_a, team_b)
     )
-
+    
     # Score at the exact moment the current stint began.
     stint_start_score <- cumulative_points
-
+    
     current_period <- first_period
     stint_start_clock <- period_length
     n <- nrow(game_df)
-
+    
     flush <- function(end_clock, per) {
       team_pairs <- list(
         c(team_a, team_b),
         c(team_b, team_a)
       )
-
+      
       for (pair in team_pairs) {
         t <- pair[1]
         opp <- pair[2]
-
+        
         if (length(lineup[[t]]) == 5) {
           own_roster <- sort(lineup[[t]])
           opp_roster <- sort(lineup[[opp]])
-
+          
           all_stints[[length(all_stints) + 1]] <<- tibble(
             fixtureId = fid,
             period = per,
@@ -285,27 +285,27 @@ build_stints <- function(
           )
         }
       }
-
+      
       # Roll this stint's scoring into the persistent game score.
       cumulative_points <<- cumulative_points + points
       stint_start_score <<- cumulative_points
     }
-
+    
     i <- 1
-
+    
     while (i <= n) {
       row <- game_df[i, ]
-
+      
       if (row$period != current_period) {
         flush(0, current_period)
-
+        
         points <- setNames(c(0, 0), c(team_a, team_b))
         current_period <- row$period
         stint_start_clock <- period_length
-
+        
         new_period_df <- game_df %>%
           filter(period == current_period)
-
+        
         if (current_period %in% half_boundary_periods) {
           lineup[[team_a]] <- get_starting_lineup(
             new_period_df,
@@ -333,11 +333,11 @@ build_stints <- function(
             )
         }
       }
-
+      
       if (isTRUE(row$is_sub)) {
         same_time_idx <- i
         j <- i
-
+        
         while (j + 1 <= n &&
                game_df$period[j + 1] == current_period &&
                isTRUE(game_df$is_sub[j + 1]) &&
@@ -345,14 +345,14 @@ build_stints <- function(
           j <- j + 1
           same_time_idx <- c(same_time_idx, j)
         }
-
+        
         flush(row$clock_seconds, current_period)
-
+        
         for (k in same_time_idx) {
           r <- game_df[k, ]
           tm <- r$team
           pid <- as.character(r$personId)
-
+          
           if (r$detail == "out") {
             lineup[[tm]] <- setdiff(
               lineup[[tm]],
@@ -365,14 +365,14 @@ build_stints <- function(
             )
           }
         }
-
+        
         points <- setNames(c(0, 0), c(team_a, team_b))
         stint_start_clock <- row$clock_seconds
         i <- j + 1
-
+        
         next
       }
-
+      
       if (
         row$action %in% names(SCORE_POINTS) &&
         isTRUE(row$success)
@@ -381,19 +381,19 @@ build_stints <- function(
           points[[row$team]] +
           SCORE_POINTS[[row$action]]
       }
-
+      
       i <- i + 1
     }
-
+    
     flush(0, current_period)
   }
-
+  
   cat(
     "\nTotal quarter-break lineup discrepancy flags across dataset:",
     n_quarter_flags,
     "- document this count as a data limitation in your write-up.\n"
   )
-
+  
   bind_rows(all_stints)
 }
 
@@ -413,7 +413,7 @@ compute_game_coverage <- function(stints_df, team_name, expected_periods = 4, pe
 exclude_broken_games <- function(stints_df, team_name, min_pct = 0.5) {
   coverage <- compute_game_coverage(stints_df, team_name)
   bad_fixtures <- coverage %>% filter(pct_of_full_game < min_pct) %>% pull(fixtureId)
-
+  
   if (length(bad_fixtures) > 0) {
     cat("Excluding", length(bad_fixtures),
         "game(s) with incomplete lineup-tracking coverage (<", min_pct * 100,
@@ -422,7 +422,7 @@ exclude_broken_games <- function(stints_df, team_name, min_pct = 0.5) {
   } else {
     cat("No games excluded - all games retained at least", min_pct * 100, "% coverage.\n")
   }
-
+  
   stints_df %>% filter(!fixtureId %in% bad_fixtures)
 }
 
@@ -433,7 +433,7 @@ validate_reconstruction <- function(stints_df, pbp_df, team_name,
   retained_games <- stints_df %>%
     filter(team == team_name) %>%
     distinct(fixtureId)
-
+  
   reconstructed <- stints_df %>%
     filter(team == team_name) %>%
     group_by(fixtureId) %>%
@@ -446,7 +446,7 @@ validate_reconstruction <- function(stints_df, pbp_df, team_name,
       incomplete_lineup = sum(map_int(lineup, length) != 5),
       .groups = "drop"
     )
-
+  
   pbp_scores <- pbp_df %>%
     semi_join(retained_games, by = "fixtureId") %>%
     filter(
@@ -460,7 +460,7 @@ validate_reconstruction <- function(stints_df, pbp_df, team_name,
       pbp_opp_points = sum(event_points[team != team_name], na.rm = TRUE),
       .groups = "drop"
     )
-
+  
   reconstructed %>%
     left_join(pbp_scores, by = "fixtureId") %>%
     mutate(
@@ -490,7 +490,7 @@ naive_pair_synergy <- function(stints_df, team_name, player_lookup,
     unnest(pairs) %>%
     mutate(id_1 = map_chr(pairs, 1), id_2 = map_chr(pairs, 2)) %>%
     select(-pairs)
-
+  
   pair_rows %>%
     group_by(id_1, id_2) %>%
     summarise(
@@ -521,7 +521,7 @@ build_player_design_matrix <- function(
     team_name,
     min_duration_sec = 15
 ) {
-
+  
   team_stints <- stints_df %>%
     filter(
       team == team_name,
@@ -536,43 +536,43 @@ build_player_design_matrix <- function(
       ),
       stint_id = row_number()
     )
-
+  
   # Collect all valid player IDs
   all_players <- team_stints$lineup %>%
     unlist(use.names = FALSE) %>%
     as.character()
-
+  
   all_players <- sort(unique(
     all_players[
       !is.na(all_players) &
         nzchar(all_players)
     ]
   ))
-
+  
   player_matrix <- matrix(
     0,
     nrow = nrow(team_stints),
     ncol = length(all_players),
     dimnames = list(NULL, all_players)
   )
-
+  
   for (i in seq_len(nrow(team_stints))) {
-
+    
     players_on <- as.character(
       team_stints$lineup[[i]]
     )
-
+    
     players_on <- players_on[
       !is.na(players_on) &
         nzchar(players_on)
     ]
-
+    
     # Match player IDs to matrix-column positions
     player_positions <- match(
       players_on,
       all_players
     )
-
+    
     if (anyNA(player_positions)) {
       warning(
         "Unmatched player ID in stint ",
@@ -583,35 +583,35 @@ build_player_design_matrix <- function(
           collapse = ", "
         )
       )
-
+      
       player_positions <- player_positions[
         !is.na(player_positions)
       ]
     }
-
+    
     if (length(player_positions) > 0) {
       player_matrix[i, player_positions] <- 1
     }
   }
-
+  
   # Opponent-team controls
   opp_dummies <- model.matrix(
     ~ opponent - 1,
     data = team_stints
   )
-
+  
   X <- cbind(
     player_matrix,
     opp_dummies
   )
-
+  
   y <- (
     team_stints$team_points -
       team_stints$opp_points
   ) / (team_stints$duration_sec / 60)
-
+  
   w <- team_stints$duration_sec
-
+  
   list(
     X = X,
     y = y,
@@ -628,12 +628,12 @@ fit_rapm_model <- function(
     player_lookup,
     lambda_choice = "lambda.1se"
 ) {
-
+  
   dm <- build_player_design_matrix(
     stints_df,
     team_name
   )
-
+  
   if (nrow(dm$X) < 15) {
     warning(
       team_name,
@@ -642,27 +642,27 @@ fit_rapm_model <- function(
       " stints after filtering."
     )
   }
-
+  
   game_ids <- unique(dm$stints$fixtureId)
-
+  
   if (length(game_ids) < 3) {
     stop(
       "At least 3 games are required for game-level cross-validation."
     )
   }
-
+  
   # Keep every game entirely within one CV fold
   fold_lookup <- setNames(
     seq_along(game_ids),
     game_ids
   )
-
+  
   fold_id <- unname(
     fold_lookup[dm$stints$fixtureId]
   )
-
+  
   set.seed(123)
-
+  
   cvfit <- cv.glmnet(
     x = dm$X,
     y = dm$y,
@@ -670,17 +670,17 @@ fit_rapm_model <- function(
     weights = dm$w,
     foldid = fold_id
   )
-
+  
   coefficients <- coef(
     cvfit,
     s = lambda_choice
   )
-
+  
   # Keep full precision
   player_coefficients <- as.numeric(
     coefficients[dm$players, 1]
   )
-
+  
   # Prediction based on all five LTU players
   # and the opponent-team control
   predicted <- as.numeric(
@@ -690,19 +690,19 @@ fit_rapm_model <- function(
       s = lambda_choice
     )
   )
-
+  
   stint_predictions <- dm$stints %>%
     mutate(
       actual_net_per_minute = dm$y,
-
+      
       predicted_net_per_minute =
         predicted,
-
+      
       stint_residual =
         actual_net_per_minute -
         predicted_net_per_minute
     )
-
+  
   player_effects <- tibble(
     personId = dm$players,
     rapm_rating = player_coefficients
@@ -717,7 +717,7 @@ fit_rapm_model <- function(
       rapm_rating
     ) %>%
     arrange(desc(rapm_rating))
-
+  
   list(
     player_effects = player_effects,
     stint_predictions = stint_predictions,
@@ -748,7 +748,7 @@ compute_connection_scores <- function(stints_df, team_name, player_lookup,
   model <- fit_rapm_model(
     stints_df, team_name, player_lookup, lambda_choice
   )
-
+  
   pair_residuals <- model$stint_predictions %>%
     mutate(
       pairs = map(
@@ -794,7 +794,7 @@ compute_connection_scores <- function(stints_df, team_name, player_lookup,
       net_per_minute, expected_net_per_minute, connection_score
     ) %>%
     arrange(desc(connection_score))
-
+  
   attr(pair_residuals, "rapm_model") <- model
   pair_residuals
 }
@@ -810,11 +810,11 @@ leave_one_game_out_stability <- function(stints_df, team_name,
   game_ids <- unique(
     stints_df$fixtureId[stints_df$team == team_name]
   )
-
+  
   loo_scores <- map_dfr(game_ids, function(game_left_out) {
     training_stints <- stints_df %>%
       filter(fixtureId != game_left_out)
-
+    
     tryCatch(
       compute_connection_scores(
         training_stints,
@@ -836,7 +836,7 @@ leave_one_game_out_stability <- function(stints_df, team_name,
       }
     )
   })
-
+  
   loo_scores %>%
     group_by(id_1, id_2) %>%
     summarise(
@@ -929,33 +929,33 @@ summarise_player_connectivity <- function(ltu_connection) {
 # Node positions are for display and do not represent court positions.
 build_connection_network_plot <- function(ltu_connection, ltu_minutes,
                                           player_labels = NULL) {
-
+  
   edges <- ltu_connection %>%
     rename(
       from = player_1,
       to = player_2,
       conn_score = connection_score
     )
-
+  
   nodes <- ltu_minutes %>%
     rename(name = player_name) %>%
     filter(name %in% union(edges$from, edges$to))
-
+  
   nodes$display_label <- nodes$name
   if (!is.null(player_labels)) {
     nodes$display_label <- unname(player_labels[str_squish(nodes$name)])
     if (anyNA(nodes$display_label)) stop("Some players have no presentation label.")
   }
   label_size <- if (is.null(player_labels)) 3.4 else 4.2
-
+  
   g <- graph_from_data_frame(
     edges,
     directed = FALSE,
     vertices = nodes
   )
-
+  
   set.seed(123)
-
+  
   ggraph(g, layout = "fr") +
     geom_edge_link(
       aes(
@@ -1019,23 +1019,23 @@ build_connection_network_plot_presentation <- function(
 
 build_interactive_connection_network <- function(ltu_connection,
                                                  ltu_minutes) {
-
+  
   # Edge information
   edges <- ltu_connection %>%
     transmute(
       from = player_1,
       to = player_2,
-
+      
       # Thicker line = more minutes together
       width = rescale(minutes_together, to = c(1, 8)),
-
+      
       # Blue positive; red negative
       color = if_else(
         connection_score >= 0,
         alpha("steelblue", 0.75),
         alpha("firebrick", 0.75)
       ),
-
+      
       title = paste0(
         "<b>", player_1, " and ", player_2, "</b>",
         "<br>Connection score: ",
@@ -1045,32 +1045,32 @@ build_interactive_connection_network <- function(ltu_connection,
         "<br>Games together: ",
         n_games_together
       ),
-
+      
       value = minutes_together
     )
-
+  
   # Player information
   nodes <- ltu_minutes %>%
     filter(player_name %in% union(edges$from, edges$to)) %>%
     transmute(
       id = player_name,
       label = player_name,
-
+      
       # Larger node = more playing time
       value = total_minutes,
-
+      
       title = paste0(
         "<b>", player_name, "</b>",
         "<br>Total minutes: ",
         round(total_minutes, 1)
       ),
-
+      
       color = "#343434",
       font.color = "#111111",
       font.size = 22,
       font.background = "rgba(255,255,255,0.85)"
     )
-
+  
   visNetwork::visNetwork(
     nodes = nodes,
     edges = edges,
@@ -1162,20 +1162,20 @@ calculate_centralisation <- function(pair_minutes, network_label = "2025") {
   if (nrow(pair_minutes) == 0) {
     stop("The pair-minutes table contains no qualifying connections.")
   }
-
+  
   edge_table <- pair_minutes %>%
     transmute(from = as.character(id_1), to = as.character(id_2), minutes_together)
-
+  
   vertex_table <- bind_rows(
     pair_minutes %>% transmute(name = as.character(id_1), player_name = player_1),
     pair_minutes %>% transmute(name = as.character(id_2), player_name = player_2)
   ) %>% distinct(name, .keep_all = TRUE)
-
+  
   network_graph <- graph_from_data_frame(d = edge_table, directed = FALSE, vertices = vertex_table)
-
+  
   E(network_graph)$weight <- E(network_graph)$minutes_together
   E(network_graph)$distance <- 1 / E(network_graph)$minutes_together
-
+  
   player_degree <- degree(network_graph, mode = "all")
   player_strength <- strength(network_graph, weights = E(network_graph)$weight)
   weighted_betweenness_raw <- betweenness(network_graph, directed = FALSE,
@@ -1186,10 +1186,10 @@ calculate_centralisation <- function(pair_minutes, network_label = "2025") {
                                 weights = E(network_graph)$distance, normalized = TRUE)
   player_eigenvector <- eigen_centrality(network_graph, directed = FALSE,
                                          weights = E(network_graph)$weight)$vector
-
+  
   V(network_graph)$weighted_strength <- as.numeric(player_strength)
   V(network_graph)$weighted_betweenness <- as.numeric(weighted_betweenness_normalised)
-
+  
   player_centrality <- tibble(
     network = as.character(network_label),
     personId = V(network_graph)$name,
@@ -1200,19 +1200,19 @@ calculate_centralisation <- function(pair_minutes, network_label = "2025") {
     weighted_closeness = as.numeric(player_closeness),
     eigenvector_centrality = as.numeric(player_eigenvector)
   ) %>% arrange(desc(weighted_strength))
-
+  
   n_players <- vcount(network_graph)
   strength_mean <- mean(player_strength)
   strength_sd <- sd(player_strength)
   strength_cv <- if (strength_mean > 0) strength_sd / strength_mean else NA_real_
   strength_gini <- gini_coefficient(player_strength)
   weighted_betweenness_gini <- gini_coefficient(weighted_betweenness_raw)
-
+  
   unweighted_betweenness <- betweenness(network_graph, directed = FALSE, weights = NA, normalized = FALSE)
   freeman_numerator <- sum(max(unweighted_betweenness) - unweighted_betweenness)
   freeman_denominator <- if (n_players > 2) ((n_players - 1)^2 * (n_players - 2)) / 2 else NA_real_
   freeman_betweenness_centralisation <- freeman_numerator / freeman_denominator
-
+  
   network_centralisation <- tibble(
     network = as.character(network_label),
     n_players = n_players,
@@ -1224,7 +1224,7 @@ calculate_centralisation <- function(pair_minutes, network_label = "2025") {
     weighted_betweenness_gini = weighted_betweenness_gini,
     freeman_betweenness_centralisation = freeman_betweenness_centralisation
   )
-
+  
   list(graph = network_graph, player_centrality = player_centrality,
        network_centralisation = network_centralisation)
 }
@@ -1280,38 +1280,63 @@ lineup_to_names <- function(personId_vec, player_lookup) {
   paste(sort(nm), collapse = " | ")
 }
 
-# 11. Download the season data ----
-
-url <- "https://embed-api.eui.connect.sportradar.com/v1/embed/303/fixtures?state=eJyrVipWslJQMjMwTjQ3T7bUNbM0sNA1NEwz0LVMSjbVtUwxTDM1N0hKSjQxVNJRUMoBKU7N03X1U6oFAK4sDo8"
-
-res <- GET(url, add_headers("User-Agent" = "Mozilla/5.0"))
-stop_for_status(res)
-
-fixtures_data <- fromJSON(content(res, "text", encoding = "UTF-8"), flatten = TRUE)
-
-# Build a clean fixtures table: extract state string + team names
-fixtures_df <- fixtures_data$data$fixtures %>%
-  mutate(
-    state = str_extract(link, "(?<=~w=f~).+"),
-    team1 = map_chr(competitors, ~ .x$name[1]),
-    team2 = map_chr(competitors, ~ .x$name[2])
-  )
-
-# Download play-by-play for all LTU fixtures.
-
-match_pick <- fixtures_df %>%
-  filter(team1 == ltu_settings$team | team2 == ltu_settings$team)
-
-LTU_pbp <- lapply(match_pick$state, function(s) {
-  Sys.sleep(0.5)
-  get_match_pbp(s)
-}) %>% bind_rows()
-LTU_pbp <- LTU_pbp %>%
-  left_join(match_pick %>% select(fixtureId, round, startTimeLocal), by = "fixtureId")
-
-if (nrow(LTU_pbp) == 0) stop("No LTU play-by-play was downloaded.")
-# These downloads can change if the provider updates the feed.
-# Keep the extraction date and data snapshot used for the final report.
+# 11. Load the saved season inputs ----
+# Refresh is opt-in. Missing files never trigger a silent download.
+input_file <- file.path("data", "raw", "LTU_women_inputs_2025.rds")
+refresh_inputs <- isTRUE(getOption("ltu.refresh_inputs", FALSE))
+if (refresh_inputs) {
+  url <- "https://embed-api.eui.connect.sportradar.com/v1/embed/303/fixtures?state=eJyrVipWslJQMjMwTjQ3T7bUNbM0sNA1NEwz0LVMSjbVtUwxTDM1N0hKSjQxVNJRUMoBKU7N03X1U6oFAK4sDo8"
+  
+  res <- GET(url, add_headers("User-Agent" = "Mozilla/5.0"))
+  stop_for_status(res)
+  
+  fixtures_data <- fromJSON(content(res, "text", encoding = "UTF-8"), flatten = TRUE)
+  
+  # Build a clean fixtures table: extract state string + team names
+  fixtures_df <- fixtures_data$data$fixtures %>%
+    mutate(
+      state = str_extract(link, "(?<=~w=f~).+"),
+      team1 = map_chr(competitors, ~ .x$name[1]),
+      team2 = map_chr(competitors, ~ .x$name[2])
+    )
+  
+  # Download play-by-play for all LTU fixtures.
+  
+  match_pick <- fixtures_df %>%
+    filter(team1 == ltu_settings$team | team2 == ltu_settings$team)
+  
+  LTU_pbp <- lapply(match_pick$state, function(s) {
+    Sys.sleep(0.5)
+    get_match_pbp(s)
+  }) %>% bind_rows()
+  LTU_pbp <- LTU_pbp %>%
+    left_join(match_pick %>% select(fixtureId, round, startTimeLocal), by = "fixtureId")
+  
+  if (nrow(LTU_pbp) == 0) stop("No LTU play-by-play was downloaded.")
+  dir.create(dirname(input_file), recursive = TRUE, showWarnings = FALSE)
+  saveRDS(list(
+    fixtures_df = fixtures_df, LTU_pbp = LTU_pbp,
+    saved_at = as.character(Sys.time()),
+    provenance = "Downloaded by LTU-team.R", source_url = url
+  ), input_file)
+} else {
+  if (!file.exists(input_file)) {
+    stop("Missing ", input_file,
+         ". Run save-analysis-inputs.R from your final analysis session, ",
+         "or explicitly refresh inputs. See REPRODUCIBILITY.md.")
+  }
+  inputs <- readRDS(input_file)
+  if (!all(c("fixtures_df", "LTU_pbp") %in% names(inputs)) ||
+      !is.data.frame(inputs$fixtures_df) || !is.data.frame(inputs$LTU_pbp) ||
+      nrow(inputs$fixtures_df) == 0 || nrow(inputs$LTU_pbp) == 0) {
+    stop("Invalid or empty women's input snapshot: ", input_file)
+  }
+  fixtures_df <- inputs$fixtures_df
+  LTU_pbp <- inputs$LTU_pbp
+  match_pick <- fixtures_df %>%
+    filter(team1 == ltu_settings$team | team2 == ltu_settings$team)
+  message("Loaded saved women's inputs: ", input_file)
+}
 
 # 12. Reconstruct lineups and estimate connection scores ----
 

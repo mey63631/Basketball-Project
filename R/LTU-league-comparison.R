@@ -30,12 +30,12 @@ build_team_network <- function(all_results) {
       loser = if_else(winner == team1, team2, team1)
     ) %>%
     transmute(from = loser, to = winner, weight = margin)
-
+  
   team_names <- unique(c(all_results$team1, all_results$team2))
-
+  
   g <- graph_from_data_frame(edges, directed = TRUE, vertices = team_names)
   E(g)$weight <- edges$weight
-
+  
   g
 }
 
@@ -43,9 +43,9 @@ build_team_network <- function(all_results) {
 # The values are team eigenvector centralities, rather than network centralisation.
 compute_team_eigenvector <- function(all_results, season_label = "2025") {
   g <- build_team_network(all_results)
-
+  
   ec <- eigen_centrality(g, directed = TRUE, weights = E(g)$weight)$vector
-
+  
   tibble(
     season = season_label,
     team = names(ec),
@@ -57,16 +57,16 @@ compute_team_eigenvector <- function(all_results, season_label = "2025") {
 pull_season_results <- function(fixtures_url, league_label) {
   res <- GET(fixtures_url, add_headers("User-Agent" = "Mozilla/5.0"))
   if (status_code(res) != 200) stop("Fixtures fetch failed: ", status_code(res))
-
+  
   fixtures_data <- fromJSON(content(res, "text", encoding = "UTF-8"), flatten = TRUE)
-
+  
   fixtures_df_out <- fixtures_data$data$fixtures %>%
     mutate(
       state = str_extract(link, "(?<=~w=f~).+"),
       team1 = map_chr(competitors, ~ .x$name[1]),
       team2 = map_chr(competitors, ~ .x$name[2])
     )
-
+  
   fixtures_df_out %>%
     mutate(
       score1 = map_dbl(competitors, ~ as.numeric(.x$score[1])),
@@ -129,7 +129,25 @@ print(team_eigenvector_2025)
 
 # 4. Summarise the men's competition ----
 
-all_results_men <- pull_season_results(url_men, "UBL Men 2025")
+men_input_file <- file.path("data", "raw", "UBL_men_results_2025.rds")
+if (isTRUE(getOption("ltu.refresh_inputs", FALSE))) {
+  all_results_men <- pull_season_results(url_men, "UBL Men 2025")
+  if (nrow(all_results_men) == 0) stop("No confirmed men's results returned.")
+  dir.create(dirname(men_input_file), recursive = TRUE, showWarnings = FALSE)
+  saveRDS(list(
+    results = all_results_men, saved_at = as.character(Sys.time()),
+    provenance = "Downloaded by LTU-league-comparison.R", source_url = url_men
+  ), men_input_file)
+} else {
+  if (!file.exists(men_input_file)) stop("Missing ", men_input_file,
+                                         ". See REPRODUCIBILITY.md for saving or refreshing inputs.")
+  men_inputs <- readRDS(men_input_file)
+  if (!is.data.frame(men_inputs$results) || nrow(men_inputs$results) == 0) {
+    stop("Invalid or empty men's input snapshot: ", men_input_file)
+  }
+  all_results_men <- men_inputs$results
+  message("Loaded saved men's inputs: ", men_input_file)
+}
 team_eigenvector_men <- compute_league_eigenvector(all_results_men, "UBL Men 2025")
 gini_men <- gini_coefficient(team_eigenvector_men$eigenvector_centralization)
 men_participation <- bind_rows(

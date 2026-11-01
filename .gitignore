@@ -1,7 +1,29 @@
+# Raw data: keep only the inputs required to reproduce the analysis
 data/raw/*
 !data/raw/.gitkeep
+!data/raw/LTU_women_inputs_2025.rds
+!data/raw/UBL_men_results_2025.rds
 
 # R and RStudio local files
 .Rhistory
 .RData
+.Ruserdata
 .Rproj.user/
+.Renviron
+
+# macOS
+.DS_Store
+
+# Quarto cache and LaTeX temporary files
+.quarto/
+*.aux
+*.log
+*.toc
+*.out
+*.fls
+*.fdb_latexmk
+*.synctex.gz
+
+# Private report files
+/Basketball_Project.qmd
+/Basketball_Project.pdf
