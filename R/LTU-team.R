@@ -1323,7 +1323,7 @@ if (refresh_inputs) {
   if (!file.exists(input_file)) {
     stop("Missing ", input_file,
          ". Run save-analysis-inputs.R from your final analysis session, ",
-         "or explicitly refresh inputs. See REPRODUCIBILITY.md.")
+         "or explicitly refresh inputs. See data/DATA.md.")
   }
   inputs <- readRDS(input_file)
   if (!all(c("fixtures_df", "LTU_pbp") %in% names(inputs)) ||

@@ -140,7 +140,7 @@ if (isTRUE(getOption("ltu.refresh_inputs", FALSE))) {
   ), men_input_file)
 } else {
   if (!file.exists(men_input_file)) stop("Missing ", men_input_file,
-                                         ". See REPRODUCIBILITY.md for saving or refreshing inputs.")
+                                         ". See data/DATA.md for saving or refreshing inputs.")
   men_inputs <- readRDS(men_input_file)
   if (!is.data.frame(men_inputs$results) || nrow(men_inputs$results) == 0) {
     stop("Invalid or empty men's input snapshot: ", men_input_file)

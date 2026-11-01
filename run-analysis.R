@@ -4,7 +4,7 @@ set.seed(2025)
 # Run the LTU basketball analysis ----
 # Open Basketball-Project.Rproj, then run source("run-analysis.R").
 # The scripts expect paths relative to the project root, not the R/ folder.
-# Saved inputs are used by default. See REPRODUCIBILITY.md for optional refresh.
+# Saved inputs are used by default. See data/DATA.md for optional refresh.
 
 scripts <- c(
   "R/LTU-team.R",

@@ -10,7 +10,7 @@ Connection scores describe performance above or below the model's prediction dur
 
 | File or folder | Purpose |
 | --- | --- |
-| `R/LTU-team.R` | 	Loads saved women's fixtures and LTU events, reconstructs lineups, fits the season model, and calculates pair scores, stability, minutes, centrality and situational summaries |
+| `R/LTU-team.R` | Loads saved women's fixtures and LTU events, reconstructs lineups, fits the season model, and calculates pair scores, stability, minutes, centrality and situational summaries |
 | `R/LTU-prediction.R` | Evaluates baseline and pair-adjusted predictions using leave-one-game-out validation |
 | `R/LTU-network-by-game.R` | Plots within-game pair residuals using the common season-model baseline |
 | `R/LTU-league-comparison.R` | Calculates women's and men's team eigenvector centrality scores and compares their distributions using the Gini coefficient |
@@ -23,7 +23,6 @@ Connection scores describe performance above or below the model's prediction dur
 | `LTU_report_data.rds` | Saved analysis objects for use in reporting |
 | `session-info.txt` | R version, platform and package information from the analysis run |
 | `save-analysis-inputs.R` | Saves input snapshots from a completed analysis session; not required for routine reproduction |
-| `REPRODUCIBILITY.md` | Instructions for preserving inputs, refreshing data and testing reproducibility |
 
 ## Requirements
 
@@ -72,7 +71,7 @@ If a stage fails, resolve the error and rerun that stage and any dependent stage
 
 The scripts save:
 
-- CSV tables in `Outputs/tables/`
+- CSV tables in `outputs/tables/`
 - Figures in `Figures/`
 - Analysis objects in `LTU_report_data.rds`
 - Session information in `session-info.txt`
@@ -111,7 +110,7 @@ Games with reconstructed playing-time coverage below 50% are excluded. Stints sh
 
 The current analysis retains eight of ten LTU games. Two games were excluded after starting-lineup detection failed. Of the eight retained games, six have full 40-minute reconstructed coverage and matching point totals. The other two have approximately 79.0% and 84.5% coverage, with differences between reconstructed and play-by-play point totals.
 
-Retaining a game does not mean its reconstructed lineups are fully correct. Review `Outputs/tables/LTU_reconstruction_checks.csv` before interpreting the results.
+Retaining a game does not mean its reconstructed lineups are fully correct. Review `outputs/tables/LTU_reconstruction_checks.csv` before interpreting the results.
 
 ### Individual ratings and pair connection scores
 
@@ -158,7 +157,7 @@ another download. The runner sets a random seed and regenerates the
 tables, figures, analysis snapshot and session information.
 
 Downloading updated source data is optional and may change the results.
-See `REPRODUCIBILITY.md` for refresh instructions. Refreshing data is not
+See `data/DATA.md` for optional refresh instructions. Refreshing data is not
 required to reproduce the saved-input analysis.
 
 ## Limitations

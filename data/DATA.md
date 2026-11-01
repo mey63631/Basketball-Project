@@ -16,7 +16,7 @@ The analysis now loads saved input snapshots by default.
 
 Snapshot export times and provenance are stored within the input files. An export time records when an object was saved and should not be interpreted as its original download time.
 
-The analysis retained eight of ten LTU games after excluding games with less than 50% reconstructed playing-time coverage. The two excluded games had starting-lineup detection failures. Of the eight retained games, six had complete 40-minute coverage and matched the play-by-play scoring totals. The other two had 79.0% and 84.5% coverage, with missing time and scoring events. These gaps may affect the estimated player and pair scores. Complete coverage and matching scores do not independently verify lineup identities. See outputs/tables/LTU_reconstruction_checks.csv for game-level coverage and scoring checks.
+The analysis retained eight of ten LTU games after excluding games with less than 50% reconstructed playing-time coverage. The two excluded games had starting-lineup detection failures. Of the eight retained games, six had complete 40-minute coverage and matched the play-by-play scoring totals. The other two had 79.0% and 84.5% coverage, with missing time and scoring events. These gaps may affect the estimated player and pair scores. Complete coverage and matching scores do not independently verify lineup identities. See `outputs/tables/LTU_reconstruction_checks.csv` for game-level coverage and scoring checks.
 
 ## Files in `data/raw/`
 
@@ -41,7 +41,13 @@ str(men_inputs$results)
 
 `save-analysis-inputs.R` preserves these inputs from a completed analysis session. It is a preparation step and is not required for routine reruns.
 
+To save inputs from the completed analysis session, run:
 
+```r
+source("save-analysis-inputs.R")
+```
+
+The script requires `fixtures_df`, `LTU_pbp` and `all_results_men` from the same completed session. It stops if snapshots already exist.
 
 ## Main fields
 
@@ -110,8 +116,7 @@ report_data$prepared_at
 
 The snapshot supports report rendering without another download when the report reads it. It does not contain every league-comparison object; the presentation also uses saved CSVs and figures. `session-info.txt` records the R and loaded package versions from the completed run.
 
-This is a derived output snapshot. Reproducing the analysis starts from
-the two input files in `data/raw/`, rather than from this report snapshot.
+This is a derived output snapshot. Reproducing the analysis starts from the two input files in `data/raw/`, rather than from this report snapshot.
 
 ## Reproducing the outputs
 
@@ -127,11 +132,30 @@ Install the required packages listed in `README.md` before running the analysis.
 
 The runner executes the team, prediction, per-game network and league-comparison scripts in that order. It sets a random seed, then saves the report snapshot and session information after successful completion. 
 
-Downloading updated data is optional, requires internet access and may change the results. See `REPRODUCIBILITY.md` for refresh instructions. Preserve the submitted input snapshots before refreshing them.
+Downloading updated data is optional, requires internet access and may change the results. See the optional refresh instructions below. Preserve the submitted input snapshots before refreshing them.
 
 R versions, package versions and platforms may cause small numerical differences. `session-info.txt` records the environment used for the completed run; it does not automatically install those package versions.
 
 Rendering the report or presentation also requires its source, referenced assets and rendering software. Running the analysis alone does not render those documents.
+
+### Optional: refresh the source data
+
+Skip this step when reproducing the submitted results. The saved inputs are sufficient.
+
+To download updated data, first back up both input snapshots and any outputs you want to retain. Then run from the project root:
+
+```r
+options(ltu.refresh_inputs = TRUE)
+
+tryCatch(
+  source("run-analysis.R"),
+  finally = options(ltu.refresh_inputs = FALSE)
+)
+```
+
+This overwrites the input snapshots and generated outputs. Updated data may change the results.
+
+If the refresh fails, restore the backed-up inputs or complete the refresh successfully before using the outputs.
 
 ## Data use and identification
 
