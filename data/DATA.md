@@ -10,28 +10,38 @@ Fixture results and play-by-play records are retrieved from the Sportradar embed
 https://embed-api.eui.connect.sportradar.com/v1/embed/303
 ```
 
-`R/LTU-team.R` downloads the women’s season fixtures, selects games involving LTU and retrieves their play-by-play records. `R/LTU-league-comparison.R` uses the women’s fixtures and downloads men’s season results. The fixture URLs and their state parameters are stored in those scripts.
+The analysis now loads saved input snapshots by default.
+
+`R/LTU-team.R` reads the saved women’s fixtures and LTU play-by-play records. `R/LTU-league-comparison.R` uses those women’s fixtures and reads the saved men’s results. Downloading updated inputs is optional; the fixture URLs and state parameters remain in the scripts.
+
+Snapshot export times and provenance are stored within the input files. An export time records when an object was saved and should not be interpreted as its original download time.
 
 The analysis retained eight of ten LTU games after excluding games with less than 50% reconstructed playing-time coverage. The two excluded games had starting-lineup detection failures. Of the eight retained games, six had complete 40-minute coverage and matched the play-by-play scoring totals. The other two had 79.0% and 84.5% coverage, with missing time and scoring events. These gaps may affect the estimated player and pair scores. Complete coverage and matching scores do not independently verify lineup identities. See outputs/tables/LTU_reconstruction_checks.csv for game-level coverage and scoring checks.
 
-## Files in data/raw/
+## Files in `data/raw/`
 
-These are saved R objects from earlier data collection. They contain extracted tables rather than untouched HTTP responses.
+
+The analysis uses these two input snapshots. These snapshots contain extracted tables rather than untouched API responses.
 
 | File | Contents | Role |
 | --- | --- | --- |
-| `fixtures_season.rds` | Saved season fixture table | Earlier fixture snapshot; the current workflow downloads fixtures again |
-| `LTU_pbp_all.rds` | Saved play-by-play table for LTU games | Earlier full-LTU-season snapshot; not automatically loaded by the current workflow |
-| `pbp_LTU_UTAS.rds` | Play-by-play for LTU–UTAS fixtures | Earlier exploratory subset; not the full sample used in the final analysis |
+| `LTU_women_inputs_2025.rds` | A list containing `fixtures_df`, `LTU_pbp`, export time and provenance | Women’s fixtures and LTU event inputs used by the team analysis |
+| `UBL_men_results_2025.rds` | A list containing `results`, export time and provenance | Men’s results used by the league comparison |
 
-Read an existing snapshot from the project root with:
+Inspect the saved inputs from the project root with:
 
 ```r
-pbp_saved <- readRDS("data/raw/LTU_pbp_all.rds")
-str(pbp_saved)
+women_inputs <- readRDS("data/raw/LTU_women_inputs_2025.rds")
+names(women_inputs)
+str(women_inputs$LTU_pbp)
+
+men_inputs <- readRDS("data/raw/UBL_men_results_2025.rds")
+str(men_inputs$results)
 ```
 
-Loading that object alone does not switch the analysis to an offline mode. The current team script still downloads its inputs. Saved files may represent different extractions; do not assume an older snapshot is identical to the latest feed.
+`save-analysis-inputs.R` preserves these inputs from a completed analysis session. It is a preparation step and is not required for routine reruns.
+
+
 
 ## Main fields
 
@@ -53,7 +63,8 @@ Player IDs are used to identify players in the modelling pipeline. Names are joi
 
 ### Reconstructed stints
 
-A stint is an interval with an unchanged inferred lineup. The stint table contains rows from both teams’ perspectives, so its total row count should not be reported as the number of LTU stints without filtering `team == "LTU"`.
+A stint is an interval with an unchanged inferred lineup. 
+The stint table contains rows from both teams’ perspectives, so its total row count should not be reported as the number of LTU stints without filtering `team == "LTU"`.
 
 | Field | Meaning |
 | --- | --- |
@@ -76,7 +87,7 @@ Quality checks compare reconstructed scores with scoring events from the same fe
 
 ## Derived tables and figures
 
-Derived CSV tables are written to `outputs/tables/` and plots to `Figures/`.
+Derived CSV tables are written to `Outputs/tables/` and plots to `Figures/`.
 
 | Script | Main saved tables |
 | --- | --- |
@@ -99,17 +110,28 @@ report_data$prepared_at
 
 The snapshot supports report rendering without another download when the report reads it. It does not contain every league-comparison object; the presentation also uses saved CSVs and figures. `session-info.txt` records the R and loaded package versions from the completed run.
 
+This is a derived output snapshot. Reproducing the analysis starts from
+the two input files in `data/raw/`, rather than from this report snapshot.
+
 ## Reproducing the outputs
 
-Open `Basketball_Project.Rproj` and run this in R from the project root:
+Open `Basketball-Project.Rproj`, restart R, and run the following from
+the project root:
 
 ```r
+options(ltu.refresh_inputs = FALSE)
 source("run-analysis.R")
 ```
 
-The runner executes the team, prediction, per-game network and league-comparison scripts in that order. It then saves the report snapshot and session information. Existing outputs with matching filenames are overwritten.
+Install the required packages listed in `README.md` before running the analysis. Once the packages and saved inputs are available, the analysis can run without accessing the live feed.
 
-An internet connection is required for the full workflow. Changes to the feed, API response structure or fixture URLs may affect later downloads. Preserve the inputs used for the submitted results. Rendering from saved outputs and rerunning the complete analysis are different workflows; the current scripts do not provide a complete offline rerun.
+The runner executes the team, prediction, per-game network and league-comparison scripts in that order. It sets a random seed, then saves the report snapshot and session information after successful completion. 
+
+Downloading updated data is optional, requires internet access and may change the results. See `REPRODUCIBILITY.md` for refresh instructions. Preserve the submitted input snapshots before refreshing them.
+
+R versions, package versions and platforms may cause small numerical differences. `session-info.txt` records the environment used for the completed run; it does not automatically install those package versions.
+
+Rendering the report or presentation also requires its source, referenced assets and rendering software. Running the analysis alone does not render those documents.
 
 ## Data use and identification
 
