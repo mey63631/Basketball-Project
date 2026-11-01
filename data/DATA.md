@@ -87,7 +87,7 @@ Quality checks compare reconstructed scores with scoring events from the same fe
 
 ## Derived tables and figures
 
-Derived CSV tables are written to `Outputs/tables/` and plots to `Figures/`.
+Derived CSV tables are written to `outputs/tables/` and plots to `Figures/`.
 
 | Script | Main saved tables |
 | --- | --- |
