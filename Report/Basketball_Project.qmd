@@ -20,7 +20,7 @@ format:
       - report-template/toc.tex
     include-in-header:
       - report-template/layout.tex
-# bibliography: references.bib
+bibliography: ../references.bib
 knitr:
   opts_chunk:
     echo: false
@@ -41,4 +41,145 @@ execute:
 \clearpage
 \pagenumbering{arabic}
 
+```{r}
+#| label: setup
+#| include: false
+# The report reads outputs saved by R/LTU-team.R, R/LTU-prediction.R, R/LTU-network-by-game.R and LTU-league-comparison.R
+# It does not download data when rendered.
+library(dplyr); library(tidyr); library(ggplot2); library(stringr)
+library(readr); library(knitr); library(scales)
 
+# shared figure style: grey for data, firebrick for highlights and reference
+# lines, steelblue as the second colour
+col_data <- "grey45"
+col_accent <- "firebrick"
+col_second <- "steelblue"
+
+theme_report <- function(base_size = 9) {
+  theme_minimal(base_size = base_size) +
+    theme(panel.grid.minor = element_blank())
+}
+theme_set(theme_report())
+
+fmt <- function(x, d = 2) formatC(x, format = "f", digits = d)
+gini_coefficient <- function(x) {
+  x <- sort(as.numeric(x[is.finite(x)]))
+  n <- length(x)
+  if (n == 0 || sum(x) == 0) return(0)
+  sum((2 * seq_len(n) - n - 1) * x) / (n * sum(x))
+}
+read_out <- function(f) {
+  read_csv(file.path("..", "outputs", "tables", f), show_col_types = FALSE)
+}
+
+
+# ---- saved outputs ----
+pair_tbl <- read_out("LTU_final_pair_connection_table.csv") |>
+  mutate(across(c(player_1, player_2), str_squish))
+cent    <- read_out("LTU_centrality_player.csv") |> mutate(player_name = str_squish(player_name))
+ratings <- read_out("LTU_rapm_ratings_full_precision.csv")
+net     <- read_out("LTU_centrality_network.csv")
+ss      <- read_out("LTU_score_state_coverage.csv")
+rc      <- read_out("LTU_reconstruction_checks.csv")
+pg      <- read_out("LTU_prediction_per_game.csv")
+po      <- read_out("LTU_prediction_overall.csv")
+women   <- read_out("LTU_team_eigenvector_women.csv") |> arrange(desc(eigenvector_centralization))
+men     <- read_out("LTU_team_eigenvector_men.csv") |> arrange(desc(eigenvector_centralization))
+clutch  <- read_out("LTU_clutch_coverage.csv")
+glab <- read_out("LTU_game_labels.csv") 
+perm    <- read_out("LTU_prediction_permutation.csv")
+pstints <- read_out("LTU_prediction_stints.csv")
+
+
+# raw-data cache: used only for counts and the extraction date
+pbp_file <- file.path(
+  "..", "data", "raw", "LTU_women_inputs_2025.rds"
+)
+
+inputs <- readRDS(pbp_file)
+n_events <- nrow(inputs$LTU_pbp)
+n_available <- n_distinct(inputs$LTU_pbp$fixtureId)
+snapshot_saved_at <- inputs$saved_at
+rm(inputs)
+
+# ---- anonymise players (same mapping as the presentation) ----
+player_names <- sort(unique(c(pair_tbl$player_1, pair_tbl$player_2, cent$player_name)))
+player_names <- player_names[!is.na(player_names) & nzchar(player_names)]
+player_labels <- setNames(paste("Player", seq_along(player_names)), player_names)
+anon <- function(x) unname(player_labels[str_squish(x)])
+pair_tbl <- pair_tbl |> mutate(player_1 = anon(player_1), player_2 = anon(player_2))
+cent <- cent |> mutate(player_name = anon(player_name))
+```
+
+
+```{r}
+#| label: derived
+#| include: false
+n_retained <- n_distinct(rc$fixtureId)
+n_positive <- sum(
+  pair_tbl$stability == "Stable positive",
+  na.rm = TRUE
+)
+n_negative <- sum(
+  pair_tbl$stability == "Stable negative",
+  na.rm = TRUE
+)
+n_match <- sum(abs(rc$coverage - 1) < 1e-8 & rc$score_check == "Match", na.rm = TRUE)
+
+n_pairs <- nrow(pair_tbl)
+top5 <- slice_max(pair_tbl, connection_score, n = 5, with_ties = FALSE)
+bot5 <- slice_min(pair_tbl, connection_score, n = 5, with_ties = FALSE)
+top_counts <- sort(table(c(top5$player_1, top5$player_2)), decreasing = TRUE)
+star_player <- names(top_counts)[1]
+star_n <- as.integer(top_counts[1])
+stab <- table(factor(pair_tbl$stability,
+  levels = c("Stable positive", "Uncertain", "Stable negative", "Insufficient stability evidence")))
+
+```
+
+# Abstract (Summary)
+
+Coaches substitute players constantly, but individual statistics such as points and plus-minus cannot show which combinations work well together, because a player’s results also depend on her teammates, her opponents and her playing time. This project examines player-pair performance and rotation structure in La Trobe University’s (LTU) women’s team in the 2025 University Basketball League (UBL). Event-level play-by-play data were used to reconstruct five-player lineups and same-lineup intervals (“stints”) for `r n_retained` of `r n_available` games. 
+
+A duration-weighted ridge regression (RAPM-style) estimated net points per minute from the LTU players on court and the opponent team. A pair’s connection score was the duration-weighted average gap between actual and predicted performance in the stints the pair shared, reported for pairs with at least 15 minutes together across at least two games. Of `r n_pairs` eligible pairs, `r stab[["Stable positive"]]` were stable positive and `r stab[["Stable negative"]]` stable negative under leave-one-game-out refits, and `r star_player` appeared in `r star_n` of the five highest-scoring pairs. Adding pair scores did not clearly improve prediction of held-out games (duration-weighted RMSE `r fmt(po$rmse_baseline, 3)` versus `r fmt(po$rmse_enhanced, 3)`), so the scores are best used to prioritise video review, not to change rotations. Interpretation is limited by the small sample, reconstructed lineups and the use of minutes rather than possessions.
+
+# Background and Motivation
+
+Coaches must decide which players to use together and when to change a lineup. Individual statistics describe aspects of player performance, but they do not establish how particular combinations perform with each other. A player's plus-minus also reflects the teammates, opponents and game situations encountered during that particular player's minutes on court [@rosenbaum2004].
+
+Adjusted plus-minus addresses part of this problem by regressing scoring margin on indicators for the players on court [@rosenbaum2004]. Because players repeatedly appear together, the indicators are strongly correlated and estimates can be unstable. Ridge regression penalises large coefficients to stabilise estimation [@hoerl1970], and @sill2010 motivated regularisation and out-of-sample testing for adjusted plus-minus. Network methods offer a complementary view: players or teams are nodes, and centrality measures describe their position in the network [@wasserman1994]. Eigenvector-based methods have also been used to rank teams from game results [@keener1993].
+
+Most adjusted plus-minus work targets individual ratings. Pairs are harder, because the number of parameters grows quickly while the number of games stays small. For LTU women's basketball, an analysis of shared playing time offers a way to organise evidence about combinations and rotation patterns. Positive performance during a pair's shared minutes may indicate a combination worth investigating, but it can also reflect with the other three teammates, favourable match-ups or short-term scoring variation. Pair rankings therefore need exposure information and validation before they can inform coaching decisions.
+
+This project combines an adjusted performance summary with a network description of player deployment. It separates three questions: which combinations were associated with above-prediction performance, how players were connected through shared minutes, and whether the estimated pair scores improved predictions in other games.
+
+
+
+# Objectives and Contribution {#sec-objectives}
+
+The primary question is: during which LTU pairings did the team perform better or worse than predicted by an additive model of its on-court players and opponent team?
+
+The analysis has four objectives:
+
+1. Reconstruct on-court lineups from event-level data and document the reliability of that reconstruction.
+2. Calculate pair connection scores relative to an additive lineup model, reporting shared minutes and games alongside each score.
+3. Describe rotation structure through a network weighted by shared playing time, and examine exposure across game situations.
+4. Assess sensitivity to individual games and evaluate whether a pair-score adjustment improves held-out prediction.
+
+The practical contribution is a workflow for turning play-by-play records into evidence that can guide coaching review. The analytical contribution is the integration of lineup reconstruction, regularised modelling, network summaries and game-level validation within a small single-team dataset. The project does not identify causal player chemistry or an optimal rotation.
+
+## Project contributions
+
+- **Data collection:** a script that retrieves fixtures and play-by-play events from the competition feed, adapts to a change in the feed's response format, and saves extracted input tables for subsequent analysis. 
+- **Data processing:** a lineup and stint reconstruction algorithm with built-in checks, including a game-coverage screen and a comparison of reconstructed scores with the feed's scoring events.
+- **Modelling and validation:** a regularised lineup model, pair connection scores, leave-one-game-out stability and a held-out prediction test.
+- **Networks and visualisation:** shared-minute networks with centrality and concentration measures, and anonymised figures for reporting.
+- **Reproducibility:** analysis scripts that run in a fixed order and save the outputs this report reads (Appendix A).
+
+
+\clearpage
+
+# References {.unnumbered}
+
+::: {#refs}
+:::
