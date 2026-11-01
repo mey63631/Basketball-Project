@@ -23,7 +23,3 @@ data/raw/*
 *.fls
 *.fdb_latexmk
 *.synctex.gz
-
-# Private report files
-/Basketball_Project.qmd
-/Basketball_Project.pdf
