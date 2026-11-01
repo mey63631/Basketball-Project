@@ -1,0 +1,79 @@
+% Monash report cover.
+\usepackage[absolute,overlay]{textpos}
+\setlength{\TPHorizModule}{1cm}
+\setlength{\TPVertModule}{1cm}
+
+\title{$title$}
+\date{$date$}
+\author{$for(by-author)$$by-author.name.literal$$sep$ \and $endfor$}
+
+\makeatletter
+\renewcommand{\maketitle}{%
+\begin{titlepage}
+\thispagestyle{empty}
+
+% Monash University logo.
+\begin{textblock}{6}(1.1,1.8)
+\noindent
+\includegraphics[width=6cm]{_extensions/quarto-monash/report/monash2.png}
+\end{textblock}
+
+% Monash Business School logo.
+\begin{textblock}{2}(1.1,25.5)
+\noindent
+\includegraphics[width=2cm]{_extensions/quarto-monash/report/MBSportrait.jpg}
+\end{textblock}
+
+% Vertical divider.
+\begin{textblock}{0.1}(7.8,1.8)
+\noindent\rule{1pt}{26cm}
+\end{textblock}
+
+% Report title.
+\begin{textblock}{10}(8.9,5.3)
+\sffamily\raggedright
+{\fontsize{24.88}{30}\selectfont
+\bfseries\color[rgb]{0.70,0,0}$title$\par}
+\end{textblock}
+
+% Unit, author, report subject, date and repository.
+\begin{textblock}{10}(8.9,16.5)
+\begin{singlespacing}
+\setlength{\parskip}{0pt}
+\sffamily\raggedright
+
+{\normalsize $unit$\par}
+
+\vspace{0.5cm}
+{\large\bfseries
+$for(by-author)$
+$by-author.name.literal$\par
+$endfor$
+}
+
+\vspace{0.6cm}
+{\normalsize Report on La Trobe University\par}
+{\normalsize Women's Basketball, UBL 2025\par}
+
+\vspace{0.7cm}
+{\large\bfseries $date$\par}
+
+\vspace{0.7cm}
+{\normalsize\bfseries GitHub repository\par}
+\vspace{0.15cm}
+{\small
+\href{https://github.com/mey63631/Basketball-Project}
+{github.com/mey63631/Basketball-Project}\par
+}
+
+\end{singlespacing}
+\end{textblock}
+
+\null
+\end{titlepage}
+}
+\makeatother
+
+% Running header and footer.
+\lhead{\sffamily LTU Basketball Analysis}
+\lfoot{\sffamily Mey Siv\enspace |\enspace $date$}

@@ -1,0 +1,12 @@
+% Layout.
+\usepackage{fvextra}
+\DefineVerbatimEnvironment{Highlighting}{Verbatim}{breaklines,breakanywhere,commandchars=\\\{\},fontsize=\small}
+\setlength{\headheight}{17pt}
+\setlength{\emergencystretch}{3em}
+\RecustomVerbatimEnvironment{verbatim}{Verbatim}{breaklines,breakanywhere,fontsize=\small}
+
+% Separate the contents heading from its navigation entries.
+\usepackage{etoolbox}
+\makeatletter
+\patchcmd{\tableofcontents}{\@starttoc{toc}}{\vspace{0.6cm}\@starttoc{toc}}{}{\PackageError{report-layout}{Unable to adjust contents spacing}{Check the document class definition of tableofcontents.}}
+\makeatother

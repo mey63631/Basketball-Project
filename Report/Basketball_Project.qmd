@@ -1,0 +1,44 @@
+---
+title: "Basketball Analysis - UBL women's basketball, 2025"
+unit: "ETC5543 - Business analytics creative activity"
+author: Mey Siv
+date: "`r Sys.Date()`"
+date-format: "D MMMM YYYY"
+format:
+  report-pdf:
+    toc: true
+    toc-depth: 2
+    number-sections: true
+    number-depth: 1
+    linestretch: 1.15
+    cite-method: citeproc
+    linkcolor: black
+    keep-tex: false
+    template-partials:
+      - report-template/before-title.tex
+      - report-template/title.tex
+      - report-template/toc.tex
+    include-in-header:
+      - report-template/layout.tex
+# bibliography: references.bib
+knitr:
+  opts_chunk:
+    echo: false
+execute:
+  message: false
+  warning: false
+---
+
+\pagenumbering{roman}
+
+\setcounter{tocdepth}{2}
+\phantomsection
+\addcontentsline{toc}{section}{Table of contents}
+\begingroup
+\singlespacing
+\tableofcontents
+\endgroup
+\clearpage
+\pagenumbering{arabic}
+
+
