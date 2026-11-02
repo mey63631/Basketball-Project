@@ -27,6 +27,14 @@ knitr:
 execute:
   message: false
   warning: false
+geometry:
+  - top=2.4cm
+  - bottom=2.4cm
+  - left=2.5cm
+  - right=2.5cm
+  - includeheadfoot
+  - headheight=17pt
+  - footskip=1cm
 ---
 
 \pagenumbering{roman}
@@ -81,6 +89,7 @@ ratings <- read_out("LTU_rapm_ratings_full_precision.csv")
 net     <- read_out("LTU_centrality_network.csv")
 ss      <- read_out("LTU_score_state_coverage.csv")
 rc      <- read_out("LTU_reconstruction_checks.csv")
+sl <- read_out("LTU_situational_lineup_summary.csv")
 pg      <- read_out("LTU_prediction_per_game.csv")
 po      <- read_out("LTU_prediction_overall.csv")
 women   <- read_out("LTU_team_eigenvector_women.csv") |> arrange(desc(eigenvector_centralization))
@@ -135,6 +144,7 @@ star_n <- as.integer(top_counts[1])
 stab <- table(factor(pair_tbl$stability, 
   levels = c("Stable positive", "Uncertain", "Stable negative", "Insufficient stability evidence")))
 
+n_adequate <- sum(sl$minutes >= 5 & sl$games >= 2, na.rm = TRUE)
 cent <- cent |> mutate(strength_rank = rank(-weighted_strength))
 top_btw <- slice_max(cent, weighted_betweenness, n = 2, with_ties = FALSE)
 n_zero_btw <- sum(cent$weighted_betweenness < 1e-9)
@@ -277,20 +287,21 @@ Because the player indicators sum to five and the opponent indicators sum to one
 
 ## Pair connection scores
 
-The fitted model gives a residual ys-ys for each stint. For players i and j, the connection score is
+The fitted model gives a residual $y_s-\hat{y}_s$ for each stint. For players $i$ and $j$, the connection score is
 
 $$
 C_{ij}=\frac{\sum_{s:\,i,j\in L_s} d_s\,(y_s-\hat y_s)}{\sum_{s:\,i,j\in L_s} d_s},
 $$ {#eq-score}
 
-where Ls is the inferred LTU lineup in stint s. A positive score means LTU performed above the additive lineup prediction during that pair's shared stints. Its unit is net points per minute above prediction.
+where $L_s$ is the inferred LTU lineup in stint $s$. A positive score means LTU performed above the additive lineup prediction during that pair's shared stints. Its unit is net points per minute above prediction.
 
 The prediction behind each residual includes the intercept, all five LTU player indicators and the opponent indicator. The score is therefore not raw pair performance minus two player ratings. It is also not a separately estimated pair-interaction coefficient: each five-player stint contributes the same residual to ten overlapping pairs. The residuals are in-sample.
 
 Pairs are reported when they share at least 15 model-eligible minutes across at least two games. These thresholds reduce reliance on brief appearances but do not guarantee precise estimates, so each score is reported with minutes, games and a stability summary.
 
 
-### Leave-one-game-out sign stability
+## Leave-one-game-out sign stability
+
 Each retained game is removed in turn, the model is refitted, and eligible pair scores are recalculated. A pair is classified as stable positive if its score is positive in at least 80% of available refits, and stable negative if that proportion is at most 20%. Other pairs are classified as uncertain. Pairs with fewer than half as many estimates as retained games are labelled as having insufficient stability evidence; with eight games, at least four valid estimates are needed. 
 
 These labels describe sensitivity to omitting a game. They are not confidence intervals or significance tests, and they are not evidence of future predictive performance. Each refit reuses most of the same games, so the labels are far from independent validation.
@@ -323,23 +334,220 @@ Test players and opponents not seen in training receive no coefficient. Most opp
 Software is listed in Appendix A.
 
 
+# Results {#sec-results}
+
+## Pair performance and stability
+
+@tbl-pairs and @fig-pairs show the highest and lowest connection scores. Of the `r n_pairs` eligible pairs, `r stab[["Stable positive"]]` were stable positive, `r stab[["Stable negative"]]` stable negative, `r stab[["Uncertain"]]` uncertain and `r stab[["Insufficient stability evidence"]]` had insufficient evidence. Scores ranged from `r fmt(min(pair_tbl$connection_score))` to `r fmt(max(pair_tbl$connection_score))` net points per minute relative to prediction. `r star_player` appears in `r star_n` of the five highest-scoring pairs. The model's individual ratings were small, ranging from `r fmt(min(ratings$rapm_rating), 3)` to `r fmt(max(ratings$rapm_rating), 3)`, which is consistent with strong shrinkage.
+
+The extremes are selected from many pairs, so they probably overstate any real effect. The stability labels also reuse the same games, so they show sensitivity to single games rather than evidence of repeatability.
+
+```{r}
+#| label: tbl-pairs
+#| tbl-cap: "The five highest and five lowest pair connection scores. Actual and predicted are net points per minute during shared stints; score is their difference. Refits is the number of leave-one-game-out refits in which the pair was eligible."
+stab_short <- c("Stable positive" = "Stable +", "Stable negative" = "Stable -",
+                "Uncertain" = "Uncertain", "Insufficient stability evidence" = "Insufficient")
+pair_show <- bind_rows(top5, bot5) |>
+  transmute(
+    Pair = paste(player_1, "+", player_2),
+    Min = minutes_together,
+    Games = n_games_together,
+    Actual = net_per_minute,
+    Pred. = expected_net_per_minute,
+    Score = connection_score,
+    Stability = unname(stab_short[stability]),
+    Refits = n_loo_estimates
+  )
+kable(pair_show, digits = 2, booktabs = TRUE, align = "lrrrrrlr")
+```
 
 
+```{r}
+#| label: fig-pairs
+#| fig-cap: "Connection scores for the five highest and five lowest pairs. Bars are net points per minute above model prediction; colour shows leave-one-game-out stability. Pairs share at least 15 minutes across at least two games."
+#| fig-width: 7
+#| fig-height: 3.4
+#| out-width: 100%
+plot_df <- bind_rows(top5, bot5) |>
+  mutate(label = sprintf("%s + %s (%.0f min, %d games)", player_1, player_2,
+                         minutes_together, n_games_together),
+         label = reorder(label, connection_score))
+ggplot(plot_df, aes(connection_score, label, fill = stability)) +
+  geom_col() +
+  geom_vline(xintercept = 0) +
+  scale_fill_manual(values = c("Stable positive" = col_second, "Stable negative" = col_accent,
+                               "Uncertain" = col_data, "Insufficient stability evidence" = "grey85"),
+                    name = "Stability") +
+  labs(x = "Connection score (net points per minute above prediction)", y = NULL) +
+  theme(legend.position = "bottom")
+```
 
+## Connections within individual games
 
-
-
-
-
-
-
+For @fig-games, the same season-model residuals are averaged within each pair and game. These scores are descriptive and in-sample. They do not use the held-out prediction procedure. A two-minute within-game display threshold is used; this is not a reliability guarantee. Nodes and colours are consistent across panels; a missing edge indicates insufficient displayed exposure, not a score of zero.
 
 \clearpage
+```{r}
+#| label: fig-games
+#| fig-cap: "Pair scores by game using a common season-model baseline. Nodes are repeated in every panel, including players who did not play. Node size is season minutes."
+#| fig-pos: H
+#| fig-align: center
+#| out-width: "90%"
+knitr::include_graphics(
+  file.path("..", "Figures", "LTU_connection_network_by_game.png")
+)
+```
 
-# References {.unnumbered}
 
-::: {#refs}
-:::
+
+## Connection network and rotation structure
+The connection-score network in @fig-network contains eligible adjusted pair scores. It differs from the usage network used to calculate centrality: the latter uses a threshold of one shared minute in one game, rather than 15 minutes in two games.
+
+```{r}
+#| label: fig-network
+#| fig-cap: "Network of pairs with a connection score. Nodes are players (size is total minutes), edge width is shared minutes, and edge colour shows the connection score (blue positive, red negative). Players are anonymised."
+#| out-width: 100%
+
+knitr::include_graphics(
+  file.path("..", "Figures", "LTU_connection_network_presentation.png")
+)
+```
+
+
+In the shared-minute usage network, `r net$n_edges`of`r choose(net$n_players, 2)` possible pairs shared the court (density `r fmt(net$network_density,3)`;@tbl-network). Shared-minute exposure was spread fairly evenly (Gini`r fmt(net$strength_gini)`), whereas weighted betweenness was highly concentrated (Gini `r fmt(net$weighted_betweenness_gini)`):`r n_zero_btw`of`r net$n_players` players had a betweenness of zero (@fig-betweenness). Unweighted betweenness centralisation was close to zero (`r fmt(net$freeman_betweenness_centralisation, 3)`), as expected in a network this dense.
+
+The two highest bridging scores belong to `r top_btw$player_name[1]`(`r fmt(top_btw$weighted_betweenness[1])`) and `r top_btw$player_name[2]`(`r fmt(top_btw$weighted_betweenness[2])`). They rank `r top_btw$strength_rank[1]`and`r top_btw$strength_rank[2]` of `r net$n_players`for shared minutes, so the pattern is consistent with heavy exposure. Betweenness is not simply a function of minutes, however:`r second_str$player_name`, second for shared minutes, has a betweenness of `r fmt(second_str$weighted_betweenness)`. The pattern describes deployment and does not establish tactical leadership.
+
+```{r}
+#| label: tbl-network
+#| tbl-cap: "Usage-network summary (pairs with at least one shared minute)."
+
+net_tbl <- tibble(
+  Measure = c(
+    "Players",
+    "Connected pairs",
+    "Possible pairs",
+    "Density",
+    "Gini of weighted strength",
+    "Gini of weighted betweenness",
+    "Freeman betweenness centralisation (unweighted)"
+  ),
+  Value = c(
+    as.character(net$n_players),
+    as.character(net$n_edges),
+    as.character(choose(net$n_players, 2)),
+    fmt(net$network_density, 3),
+    fmt(net$strength_gini, 3),
+    fmt(net$weighted_betweenness_gini, 3),
+    fmt(net$freeman_betweenness_centralisation, 3)
+  )
+)
+
+kable(net_tbl, booktabs = TRUE, align = "lr")
+```
+
+```{r}
+#| label: fig-betweenness
+#| fig-cap: "Weighted betweenness by player in the shared-minute network. Bar shading shows weighted strength (total shared minutes)."
+#| fig-width: 7
+#| fig-height: 3.4
+#| out-width: 100%
+ggplot(cent, aes(weighted_betweenness, reorder(player_name, weighted_betweenness),
+                 fill = weighted_strength)) +
+  geom_col() +
+  scale_fill_gradient(low = "grey85", high = col_second, name = "Shared minutes") +
+  labs(x = "Weighted betweenness", y = NULL)
+```
+
+
+## Situational coverage
+
+LTU spent `r share_of("Leading by 6+")`% of observed minutes leading by at least six points, `r share_of("Within 5 points")`% within five points and `r share_of("Trailing by 6+")`% trailing by at least six (@fig-state). Trailing situations appeared in only `r ss$n_games[ss$score_state == "Trailing by 6+"]` of the retained games. The clutch window contained `r clutch$n_stints` stints totalling `r fmt(clutch$total_minutes, 1)` minutes across `r clutch$n_games` games. Only `r n_adequate` lineup-by-situation combinations reached five minutes across two games. This is too little to compare closing lineups, so the situational results are descriptive.
+
+
+```{r}
+#| label: fig-state
+#| fig-cap: "Share of LTU minutes by score state at stint start, labelled with the number of games in which each state occurred."
+#| fig-width: 6
+#| fig-height: 2.8
+ss |>
+  mutate(score_state = factor(score_state,
+         levels = c("Leading by 6+", "Within 5 points", "Trailing by 6+"))) |>
+  ggplot(aes(score_state, share, fill = score_state)) +
+  geom_col(show.legend = FALSE) +
+  geom_text(aes(label = sprintf("%.0f%%\n%d games", 100 * share, n_games)), vjust = -0.3, size = 3) +
+  scale_y_continuous(labels = scales::percent, expand = expansion(mult = c(0, 0.2))) +
+  scale_fill_manual(values = c(col_second, col_data, col_accent)) +
+  labs(x = NULL, y = "Share of LTU minutes")
+```
+\clearpage
+
+## Predictive performance
+
+Across `r po$n_stints` held-out stints, the baseline model had a weighted RMSE of `r fmt(po$rmse_baseline, 3)` and the model with the pair adjustment `r fmt(po$rmse_enhanced, 3)` (@tbl-pred). The adjustment lowered error in `r sum(pg$improved)` of `r nrow(pg)` held-out games (@fig-pred). The weighted correlation between the pair feature and the baseline's residuals was `r fmt(wcor, 3)`, and the exploratory permutation p-value was `r fmt(perm$permutation_p)`. These results do not show a clear predictive advantage for this adjustment. They apply to the tested average-pair adjustment, not to every possible model of player interactions. 
+
+```{r}
+#| label: tbl-pred
+#| tbl-cap: "Held-out weighted RMSE by game. Difference is baseline minus pair-adjusted error, so positive values mean the pair scores helped."
+pred_tbl <- pg |>
+  mutate(Game = as.character(row_number())) |>
+  transmute(Game, Stints = n_stints, Baseline = rmse_baseline,
+            `With pair scores` = rmse_enhanced,
+            Difference = rmse_baseline - rmse_enhanced,
+            Improved = if_else(improved, "Yes", "No"))
+overall_row <- tibble(Game = "All", Stints = po$n_stints, Baseline = po$rmse_baseline,
+                      `With pair scores` = po$rmse_enhanced,
+                      Difference = po$rmse_baseline - po$rmse_enhanced,
+                      Improved = sprintf("%d of %d", sum(pg$improved), nrow(pg)))
+kable(bind_rows(pred_tbl, overall_row), digits = 3, booktabs = TRUE, align = "lrrrrrl")
+```
+
+```{r}
+#| label: fig-pred
+#| fig-cap: "Held-out prediction error by game. Points left of the grey point (lower error) mean the pair scores helped in that game."
+#| fig-width: 6
+#| fig-height: 3
+#| out-width: 80%
+pg |>
+  mutate(game = factor(row_number())) |>
+  ggplot(aes(y = game)) +
+  geom_segment(aes(x = rmse_baseline, xend = rmse_enhanced, yend = game), colour = "grey70") +
+  geom_point(aes(x = rmse_baseline, colour = "Baseline"), size = 2.5) +
+  geom_point(aes(x = rmse_enhanced, colour = "With pair scores"), size = 2.5) +
+  scale_colour_manual(values = c("Baseline" = col_data, "With pair scores" = col_accent), name = NULL) +
+  labs(x = "Prediction error (weighted RMSE; lower is better)", y = "Held-out game") +
+  theme(legend.position = "bottom")
+```
+
+# Discussion
+
+The analysis distinguishes descriptive pair performance, rotation structure and predictive usefulness. Above-prediction shared minutes identify combinations that may warrant further investigation, but overlapping lineups prevent attributing those residuals to a particular pair. Leave-one-game-out stability adds evidence about sensitivity to the observed games, while held-out prediction asks whether the information transfers to an omitted game. These are different forms of validation, and only the second looks beyond the games used to estimate the scores.
+
+The lack of predictive improvement limits claims that the pair scores identify repeatable advantages. The strong coefficient shrinkage of the individual ratings reflects the influence of regularisation in this design; it does not mean players have equal ability, nor that the model has isolated their contributions. The network results are descriptive: the rotation was broadly connected, and bridging positions sat with heavily used players.
+
+For coaches, the most defensible use is targeted video review. The pair table can point to stretches in which to examine spacing, defensive coverage and the contribution of the other three players. The usage network can describe which players link rotation groups, without assigning tactical leadership from centrality alone. The results give no basis for changing rotations on predictive grounds.
+
+
+## Limitations
+
+- **Sample:** one season, one team's perspective, and `r n_retained` retained games. Excluded games also remove data, and a coverage screen of 50% is permissive.
+- **Lineup reconstruction:** opening lineups are inferred, and lineups are carried between periods without independent verification between periods.
+- **Outcome measure:** performance is per minute rather than per possession, so pace differences remain, and short stints give noisy rates.
+- **Controls:** the opponent control is team-level and regularised, and most opponents appear in only one retained game. Score state is not in the baseline model.
+- **Interpretation:** a pair's residual can reflect the contributions of the other three players or game circumstances. Many overlapping pairs create opportunities for extreme rankings by chance, and residuals are in-sample.
+- **Validation:** stability labels reuse overlapping games, and the permutation benchmark ignores within-game dependence.
+
+## Future work
+
+Future work should prioritise verified lineups and archived source data, then more games and accessible seasons of 2026. Useful sensitivity checks include stricter coverage rules, alternative stint and pair-exposure thresholds, and a comparison of `lambda.1se` with `lambda.min`. A larger dataset could support possession-adjusted outcomes, controls for opposing lineups and a pair adjustment calibrated within each training fold. A temporal split would better assess prediction of future games than leave-one-game-out within a season.
+
+
+# Conclusion
+
+This project develops a workflow for examining player connections and rotation structure in LTU women's basketball. The pair scores identify combinations for further observation, and the usage network describes broad player overlap with concentrated bridging positions. However, the tested pair-score adjustment did not clearly improve held-out prediction.
+
+The practical recommendation is to use these results to prioritise video review and data collection. More verified games, and evidence that patterns repeat, are needed before using the scores to recommend changes to rotations.
+
 
 \clearpage
 
@@ -348,3 +556,41 @@ Software is listed in Appendix A.
 Analyses were run in R [@rcore] using the tidyverse [@wickham2019], `glmnet` [@friedman2010] and `igraph` [@csardi2006]. The runner, `run-analysis.R`, executes four scripts in order: `R/LTU-team.R` loads saved inputs, reconstructs stints and calculates connection scores and situational summaries; `R/LTU-prediction.R` evaluates held-out predictions; `R/LTU-network-by-game.R` produces per-game networks; and `R/LTU-league-comparison.R` calculates league-level centrality scores.
 
 The report is rendered separately and reads saved outputs and input snapshots without downloading new data. Player labels are used in all tables and figures displayed in the report.
+
+
+# Appendix B: League context {.unnumbered}
+
+For context, a team-level network was built from all UBL results in each competition. Each match adds an arrow from the losing team to the winning team, weighted by winning margin, and eigenvector centrality ranks teams so that wins over highly ranked teams count for more [@keener1993; @bonacich1972]. Scores are scaled so the top team equals 1. The Gini coefficient summarises how concentrated these scores are.
+
+In the women's competition `r women$team[1]` ranked first and LTU ranked `r which(women$team == "LTU")` of `r nrow(women)` (Gini `r fmt(gini_w)`). In the men's competition `r men$team[1]` ranked first (Gini `r fmt(gini_m)`) and `r women$team[1]` ranked `r which(men$team == women$team[1])`, so team strength was specific to each competition (@fig-league). This is one season, and the measure rewards winning margins as well as wins.
+
+```{r}
+#| label: fig-league
+#| fig-cap: "Eigenvector centrality of teams from the 2025 results network, by competition. LTU is highlighted."
+#| fig-width: 7
+#| fig-height: 3.3
+#| out-width: 100%
+league <- bind_rows(mutate(women, league = "Women"), mutate(men, league = "Men")) |>
+  mutate(team_key = paste(league, team, sep = "___"))
+league$team_key <- reorder(league$team_key, league$eigenvector_centralization)
+ggplot(league, aes(eigenvector_centralization, team_key, fill = team == "LTU")) +
+  geom_col(show.legend = FALSE) +
+  scale_fill_manual(values = c(`TRUE` = col_accent, `FALSE` = col_data)) +
+  scale_y_discrete(labels = function(x) sub("^.*___", "", x)) +
+  facet_wrap(~ league, scales = "free_y") +
+  labs(x = "Eigenvector centrality (top team = 1)", y = NULL)
+```
+
+\clearpage
+
+# References {.unnumbered}
+
+::: {#refs}
+:::
+
+
+## AI Acknowledgement {.unnumbered}
+
+AI tools were used to support the preparation of this report for educational purposes. Their use was limited to assisting with code debugging, wording refinement, and report formatting.
+
+All AI-generated content was critically reviewed, edited, and adapted by the author. The final modelling decisions, analysis, interpretation, and recommendations are my responsibility.
