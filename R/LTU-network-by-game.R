@@ -47,9 +47,22 @@ game_key <- season_model$stint_predictions %>%
   distinct(fixtureId, opponent) %>% arrange(fixtureId) %>%
   mutate(game = paste0("Game ", row_number(), " vs ", opponent))
 
-nodes <- ltu_minutes %>% transmute(
-  name = as.character(personId), player_name, total_minutes
-)
+# Use the Player labels created by LTU-team.R.
+if (!exists("player_labels")) {
+  stop("Run R/LTU-team.R first to create player_labels.")
+}
+
+nodes <- ltu_minutes %>%
+  transmute(
+    name = as.character(personId),
+    player_name = unname(
+      player_labels[stringr::str_squish(player_name)]
+    ),
+    total_minutes
+  )
+
+stopifnot(!anyNA(nodes$player_name))
+
 edges <- game_pair_scores %>%
   filter(minutes_together >= min_game_minutes) %>%
   left_join(game_key, by = c("fixtureId", "opponent")) %>%
