@@ -1348,6 +1348,14 @@ stints_df <- build_stints(
   LTU_pbp
 )
 
+game_coverage_all <- compute_game_coverage(
+  stints_df,
+  ltu_settings$team
+) |>
+  mutate(
+    retained = pct_of_full_game >= ltu_settings$min_coverage
+  )
+
 stints_df_clean <- exclude_broken_games(
   stints_df,
   team_name = ltu_settings$team,
@@ -1675,4 +1683,5 @@ write_ltu_table(centrality_2025$network_centralisation, "LTU_centrality_network.
 write_ltu_table(score_state_coverage, "LTU_score_state_coverage.csv")
 write_ltu_table(clutch_coverage, "LTU_clutch_coverage.csv")
 write_ltu_table(game_participation, "LTU_player_game_participation.csv")
+write_ltu_table(game_coverage_all, "LTU_game_coverage_all.csv")
 message("Team analysis finished. Tables: outputs/tables/; plots: Figures/.")

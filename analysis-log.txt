@@ -1,0 +1,404 @@
+WARNING: found 4 pre-sub starters for LTU in this period (expected 5)
+WARNING: found 4 pre-sub starters for CU in this period (expected 5)
+WARNING: found 3 pre-sub starters for LTU in this period (expected 5)
+WARNING: found 4 pre-sub starters for UniSC Mari in this period (expected 5)
+
+Total quarter-break lineup discrepancy flags across dataset: 0 - document this count as a data limitation in your write-up.
+Excluding 2 game(s) with incomplete lineup-tracking coverage (< 50 % of expected game time) - starting lineup detection likely failed:
+# A tibble: 2 × 3
+  fixtureId                            total_sec pct_of_full_game
+  <chr>                                    <dbl>            <dbl>
+1 3312ef8e-6923-11f0-a3ed-b920f19ce4b0       318             0.13
+2 3341678c-6923-11f0-a62e-2b275baa3629       303             0.13
+# A tibble: 73 × 12
+   player_1 player_2 minutes_together n_games_together net_per_minute expected_net_per_min…¹ connection_score
+   <chr>    <chr>               <dbl>            <int>          <dbl>                  <dbl>            <dbl>
+ 1 Talia D… Emilia …             25.0                3           1.28                   0.17             1.12
+ 2 Eleanor… Emilia …             17.0                3           1.23                   0.17             1.07
+ 3 Jaida  … Nicolet…             15.2                2           1.18                   0.17             1.02
+ 4 Nicolet… Alana  …             15.2                2           0.92                   0.17             0.76
+ 5 Claudia… Emilia …             59.4                4           0.89                   0.17             0.73
+ 6 Georgia… Kayla  …             20.0                3           0.85                   0.17             0.69
+ 7 Emilia … Kayla  …             35.7                3           0.84                   0.17             0.67
+ 8 Emilia … Sarah  …             34.6                4           0.84                   0.17             0.67
+ 9 Anastas… Nicolet…             29.0                2           0.83                   0.17             0.66
+10 Claudia… Nicolet…             24.9                2           0.8                    0.17             0.64
+# ℹ 63 more rows
+# ℹ abbreviated name: ¹​expected_net_per_minute
+# ℹ 5 more variables: stability <chr>, n_loo_estimates <int>, proportion_positive <dbl>,
+#   min_loo_score <dbl>, max_loo_score <dbl>
+# ℹ Use `print(n = ...)` to see more rows
+# A tibble: 8 × 14
+  fixtureId             reconstructed_team_p…¹ reconstructed_opp_po…² reconstructed_minutes negative_duration
+  <chr>                                  <dbl>                  <dbl>                 <dbl>             <int>
+1 33291c46-6923-11f0-9…                     55                     47                  31.6                 0
+2 3320942c-6923-11f0-9…                     79                     60                  33.8                 0
+3 331a3f3d-6923-11f0-b…                     84                     62                  40                   0
+4 33277367-6923-11f0-b…                     75                     57                  40                   0
+5 33363578-6923-11f0-8…                     74                     72                  40                   0
+6 333885ec-6923-11f0-9…                     82                     60                  40                   0
+7 334fc5b8-6923-11f0-9…                     93                     83                  40                   0
+8 a95d5341-9a9a-11f0-a…                     62                     99                  40                   0
+# ℹ abbreviated names: ¹​reconstructed_team_points, ²​reconstructed_opp_points
+# ℹ 9 more variables: zero_duration <int>, incomplete_lineup <int>, pbp_team_points <dbl>,
+#   pbp_opp_points <dbl>, expected_minutes <dbl>, coverage <dbl>, team_score_difference <dbl>,
+#   opp_score_difference <dbl>, score_check <chr>
+# A tibble: 3 × 2
+  stability           n
+  <chr>           <int>
+1 Stable negative    28
+2 Stable positive    35
+3 Uncertain          10
+# A tibble: 16 × 3
+   player_name           personId                             total_minutes
+   <chr>                 <chr>                                        <dbl>
+ 1 Kayla  Vitale         22afe2c5-6e15-11f0-83a4-a91f2196eeed         197. 
+ 2 Jaida  Reid           21c30428-6e15-11f0-a5b5-6d954753580e         161. 
+ 3 Sarah  Carr           260b9628-6e15-11f0-a24e-e514ce23112d         136. 
+ 4 Talia D'Agostino      1d523fba-6e15-11f0-a4c9-4560ff8da6b5         135. 
+ 5 Claudia  Hii          1c97e645-6e15-11f0-91f0-8b14a639cf26         132. 
+ 6 Emily  Maltezos       1fdc32ad-6e15-11f0-9b15-7baa26226473         110  
+ 7 Sarah  Stafford       26d07ba4-6e15-11f0-9a7c-315a9e8a9df3          95.7
+ 8 Eleanor Bollands      1e1b2469-6e15-11f0-839b-0fe37f4dead4          89.3
+ 9 Tahlia Leeson         277f6031-6e15-11f0-abbc-ff0006f8e076          85.4
+10 Emilia Marinkovic     1f1666d2-6e15-11f0-a36f-5737ddec3f72          81.3
+11 Alana  Poulton        2526fba3-6e15-11f0-a39c-8b14a639cf26          81.1
+12 Anastasia Gak         1bd768fb-6e15-11f0-901a-01566edde3dd          52.1
+13 Georgia  Holland      20b27b3d-6e15-11f0-9aaa-a91f2196eeed          52.1
+14 Coco Erin             2465fc70-6e15-11f0-9764-9b6d4c4eed09          45.3
+15 Nicoletta  Karakiklas 23831ce4-6e15-11f0-9c79-315a9e8a9df3          42.4
+16 Alana  Steele         1b08b1cf-6e15-11f0-8d1c-d102bfdc3791          30.9
+# A tibble: 16 × 4
+   player                n_qualifying_pairs weighted_connection_score cumulative_pair_minutes
+   <chr>                              <int>                     <dbl>                   <dbl>
+ 1 Emilia Marinkovic                      9                      0.64                    263 
+ 2 Nicoletta  Karakiklas                  5                      0.6                     101.
+ 3 Georgia  Holland                       6                      0.49                    123.
+ 4 Anastasia Gak                          6                      0.34                    146.
+ 5 Eleanor Bollands                       8                      0.25                    308.
+ 6 Claudia  Hii                          12                      0.12                    489.
+ 7 Talia D'Agostino                      12                      0.08                    509.
+ 8 Coco Erin                              7                      0.06                    148.
+ 9 Tahlia Leeson                         11                      0.02                    313.
+10 Alana  Poulton                        11                     -0.07                    288.
+11 Kayla  Vitale                         13                     -0.08                    757.
+12 Sarah  Carr                           12                     -0.13                    532.
+13 Alana  Steele                          2                     -0.19                     38 
+14 Jaida  Reid                           12                     -0.23                    606.
+15 Sarah  Stafford                       11                     -0.26                    325.
+16 Emily  Maltezos                        9                     -0.39                    397.
+# A tibble: 5 × 12
+  player_1  player_2 minutes_together n_games_together net_per_minute expected_net_per_min…¹ connection_score
+  <chr>     <chr>               <dbl>            <int>          <dbl>                  <dbl>            <dbl>
+1 Talia D'… Emilia …             25.0                3           1.28                   0.17             1.12
+2 Eleanor … Emilia …             17.0                3           1.23                   0.17             1.07
+3 Jaida  R… Nicolet…             15.2                2           1.18                   0.17             1.02
+4 Nicolett… Alana  …             15.2                2           0.92                   0.17             0.76
+5 Claudia … Emilia …             59.4                4           0.89                   0.17             0.73
+# ℹ abbreviated name: ¹​expected_net_per_minute
+# ℹ 5 more variables: stability <chr>, n_loo_estimates <int>, proportion_positive <dbl>,
+#   min_loo_score <dbl>, max_loo_score <dbl>
+# A tibble: 5 × 12
+  player_1  player_2 minutes_together n_games_together net_per_minute expected_net_per_min…¹ connection_score
+  <chr>     <chr>               <dbl>            <int>          <dbl>                  <dbl>            <dbl>
+1 Sarah  C… Sarah  …             15.6                4          -1.28                   0.17            -1.45
+2 Emily  M… Sarah  …             33.8                3          -0.98                   0.17            -1.14
+3 Claudia … Emily  …             17.6                3          -0.74                   0.17            -0.91
+4 Emily  M… Jaida  …             46.8                3          -0.66                   0.17            -0.83
+5 Alana  P… Sarah  …             26.1                5          -0.5                    0.17            -0.66
+# ℹ abbreviated name: ¹​expected_net_per_minute
+# ℹ 5 more variables: stability <chr>, n_loo_estimates <int>, proportion_positive <dbl>,
+#   min_loo_score <dbl>, max_loo_score <dbl>
+   network n_players n_edges network_density mean_weighted_strength strength_cv strength_gini
+1 LTU 2025        16     112           0.933                381.729       0.493         0.267
+  weighted_betweenness_gini freeman_betweenness_centralisation
+1                     0.881                              0.002
+# A tibble: 16 × 6
+   player_name        degree weighted_strength weighted_betweenness weighted_closeness eigenvector_centrality
+   <chr>               <dbl>             <dbl>                <dbl>              <dbl>                  <dbl>
+ 1 Kayla  Vitale          15              786.                0.419               36.0                  1    
+ 2 Claudia  Hii           15              529.                0.19                29.9                  0.654
+ 3 Sarah  Stafford        15              383.                0.019               26.2                  0.483
+ 4 Alana  Poulton         14              325.                0.01                22.4                  0.393
+ 5 Anastasia Gak          14              209.                0.01                18.5                  0.205
+ 6 Jaida  Reid            15              646.                0                   32.5                  0.848
+ 7 Sarah  Carr            14              543.                0                   29.6                  0.771
+ 8 Talia D'Agostino       15              541.                0                   28.7                  0.749
+ 9 Emily  Maltezos        14              440.                0                   27.1                  0.647
+10 Eleanor Bollands       15              357.                0                   24.6                  0.523
+11 Tahlia Leeson          13              342.                0                   23.5                  0.458
+12 Emilia Marinkovic      14              325.                0                   22.0                  0.421
+13 Georgia  Holland       14              208.                0                   16.0                  0.234
+14 Coco Erin              12              181.                0                   17.0                  0.251
+15 Nicoletta  Karaki…     13              170.                0                   15.4                  0.181
+16 Alana  Steele          12              124.                0                   12.7                  0.151
+# A tibble: 8 × 2
+  a                     b                    
+  <chr>                 <chr>                
+1 Alana  Poulton        Alana  Steele        
+2 Alana  Steele         Coco Erin            
+3 Alana  Steele         Tahlia Leeson        
+4 Anastasia Gak         Sarah  Carr          
+5 Coco Erin             Emilia Marinkovic    
+6 Coco Erin             Georgia  Holland     
+7 Emily  Maltezos       Nicoletta  Karakiklas
+8 Nicoletta  Karakiklas Tahlia Leeson        
+# A tibble: 16 × 4
+   player_name           n_games_played total_minutes avg_minutes_per_game
+   <chr>                          <int>         <dbl>                <dbl>
+ 1 Alana  Steele                      3          30.9                 10.3
+ 2 Nicoletta  Karakiklas              3          42.4                 14.1
+ 3 Coco Erin                          3          45.3                 15.1
+ 4 Anastasia Gak                      4          52.1                 13  
+ 5 Georgia  Holland                   4          52.1                 13  
+ 6 Emilia Marinkovic                  4          81.3                 20.3
+ 7 Tahlia Leeson                      4          85.4                 21.4
+ 8 Emily  Maltezos                    4         110                   27.5
+ 9 Alana  Poulton                     5          81.1                 16.2
+10 Eleanor Bollands                   6          89.3                 14.9
+11 Sarah  Stafford                    6          95.7                 16  
+12 Claudia  Hii                       6         132.                  22  
+13 Talia D'Agostino                   6         135.                  22.6
+14 Sarah  Carr                        7         136.                  19.4
+15 Jaida  Reid                        7         161.                  23.1
+16 Kayla  Vitale                      7         197.                  28.1
+# A tibble: 1 × 3
+  min_margin max_margin missing_margin
+       <dbl>      <dbl>          <int>
+1        -41         26              0
+# A tibble: 1 × 3
+  n_stints total_minutes n_games
+     <int>         <dbl>   <int>
+1       14          9.42       3
+# A tibble: 3 × 4
+  score_state     n_stints total_minutes n_games
+  <chr>              <int>         <dbl>   <int>
+1 Leading by 6+        123         134.        7
+2 Trailing by 6+        37          36.2       3
+3 Within 5 points      120         135.        8
+# A tibble: 152 × 10
+   lineup_name         score_state minutes games n_stints points_for points_against net_points net_per_minute
+   <chr>               <chr>         <dbl> <int>    <int>      <dbl>          <dbl>      <dbl>          <dbl>
+ 1 Eleanor Bollands |… Within 5 p…   13.9      3        6         29             18         11          0.792
+ 2 Alana  Poulton | A… Within 5 p…    8.13     1        9         17              6         11          1.35 
+ 3 Alana  Steele | An… Leading by…    5.83     1        6          4              9         -5         -0.857
+ 4 Eleanor Bollands |… Within 5 p…    5.83     2        3         17              8          9          1.54 
+ 5 Eleanor Bollands |… Within 5 p…    5.53     2        2          4              9         -5         -0.904
+ 6 Jaida  Reid | Kayl… Within 5 p…    5.4      1        2          8             11         -3         -0.556
+ 7 Eleanor Bollands |… Leading by…    5.35     1        2         12              4          8          1.50 
+ 8 Alana  Poulton | C… Within 5 p…    4.93     1        2         10              5          5          1.01 
+ 9 Claudia  Hii | Jai… Within 5 p…    4.83     1        5          8              8          0          0    
+10 Alana  Poulton | C… Within 5 p…    4.35     1        1          9              2          7          1.61 
+# ℹ 142 more rows
+# ℹ 1 more variable: evidence_level <chr>
+# ℹ Use `print(n = ...)` to see more rows
+# A tibble: 3 × 10
+  lineup_name          score_state minutes games n_stints points_for points_against net_points net_per_minute
+  <chr>                <chr>         <dbl> <int>    <int>      <dbl>          <dbl>      <dbl>          <dbl>
+1 Eleanor Bollands | … Within 5 p…   13.9      3        6         29             18         11          0.792
+2 Eleanor Bollands | … Within 5 p…    5.83     2        3         17              8          9          1.54 
+3 Eleanor Bollands | … Within 5 p…    5.53     2        2          4              9         -5         -0.904
+# ℹ 1 more variable: evidence_level <chr>
+# A tibble: 155 × 7
+   lineup_name                                    game_phase minutes games n_stints net_points net_per_minute
+   <chr>                                          <chr>        <dbl> <int>    <int>      <dbl>          <dbl>
+ 1 Eleanor Bollands | Emily  Maltezos | Kayla  V… First half   13.4      3        5         13          0.973
+ 2 Eleanor Bollands | Emily  Maltezos | Kayla  V… Third qua…    5.87     2        3          6          1.02 
+ 3 Eleanor Bollands | Emily  Maltezos | Jaida  R… First half    5.53     2        2         -5         -0.904
+ 4 Jaida  Reid | Kayla  Vitale | Sarah  Carr | T… First half    5.4      1        2         -3         -0.556
+ 5 Alana  Poulton | Anastasia Gak | Claudia  Hii… Early fou…    5.1      1        4          3          0.588
+ 6 Claudia  Hii | Jaida  Reid | Kayla  Vitale | … Third qua…    5.05     1        4         -3         -0.594
+ 7 Eleanor Bollands | Georgia  Holland | Jaida  … Third qua…    5.05     1        2          6          1.19 
+ 8 Eleanor Bollands | Emily  Maltezos | Jaida  R… Third qua…    4.87     1        2          6          1.23 
+ 9 Claudia  Hii | Emilia Marinkovic | Jaida  Rei… First half    4.82     2        4         -1         -0.208
+10 Alana  Steele | Anastasia Gak | Georgia  Holl… Early fou…    4.52     1        5         -1         -0.221
+# ℹ 145 more rows
+# ℹ Use `print(n = ...)` to see more rows
+# A tibble: 20 × 6
+   lineup_name                                               minutes games n_stints net_points net_per_minute
+   <chr>                                                       <dbl> <int>    <int>      <dbl>          <dbl>
+ 1 Alana  Poulton | Coco Erin | Jaida  Reid | Sarah  Staffo…  2.85       1        1          4          1.40 
+ 2 Alana  Poulton | Claudia  Hii | Coco Erin | Emily  Malte…  2.73       1        1          2          0.732
+ 3 Coco Erin | Emily  Maltezos | Kayla  Vitale | Sarah  Car…  2.73       1        4          1          0.366
+ 4 Alana  Poulton | Anastasia Gak | Claudia  Hii | Emilia M…  2.72       1        3         -3         -1.10 
+ 5 Emily  Maltezos | Jaida  Reid | Kayla  Vitale | Sarah  S…  2.65       1        3          0          0    
+ 6 Alana  Steele | Emilia Marinkovic | Jaida  Reid | Kayla …  2.38       1        3          2          0.839
+ 7 Emily  Maltezos | Jaida  Reid | Kayla  Vitale | Sarah  C…  2.18       1        1         -5         -2.29 
+ 8 Alana  Poulton | Coco Erin | Jaida  Reid | Sarah  Carr |…  2.03       1        2          2          0.984
+ 9 Alana  Poulton | Anastasia Gak | Claudia  Hii | Eleanor …  1.9        1        2          1          0.526
+10 Georgia  Holland | Jaida  Reid | Kayla  Vitale | Sarah  …  1.62       1        3         -1         -0.619
+11 Alana  Steele | Anastasia Gak | Claudia  Hii | Georgia  …  1.5        1        2          2          1.33 
+12 Alana  Steele | Anastasia Gak | Georgia  Holland | Nicol…  1.32       1        1         -4         -3.04 
+13 Alana  Poulton | Emily  Maltezos | Jaida  Reid | Kayla  …  1.28       1        1          0          0    
+14 Alana  Steele | Claudia  Hii | Eleanor Bollands | Emilia…  1.28       1        1          2          1.56 
+15 Anastasia Gak | Claudia  Hii | Eleanor Bollands | Emilia…  1.23       1        1         -1         -0.811
+16 Anastasia Gak | Coco Erin | Emily  Maltezos | Kayla  Vit…  0.967      1        1          0          0    
+17 Alana  Steele | Emilia Marinkovic | Kayla  Vitale | Sara…  0.833      1        1         -2         -2.4  
+18 Claudia  Hii | Jaida  Reid | Kayla  Vitale | Sarah  Carr…  0.567      1        3          3          5.29 
+19 Emily  Maltezos | Jaida  Reid | Kayla  Vitale | Sarah  S…  0.2        1        1          0          0    
+20 Claudia  Hii | Emily  Maltezos | Jaida  Reid | Kayla  Vi…  0.0833     1        2          0          0    
+# A tibble: 6 × 6
+  lineup_name                                                minutes games n_stints net_points net_per_minute
+  <chr>                                                        <dbl> <int>    <int>      <dbl>          <dbl>
+1 Alana  Poulton | Coco Erin | Jaida  Reid | Sarah  Staffor…  2.85       1        1          4          1.40 
+2 Emily  Maltezos | Jaida  Reid | Kayla  Vitale | Sarah  St…  2.65       1        3          0          0    
+3 Alana  Poulton | Anastasia Gak | Claudia  Hii | Emilia Ma…  1.65       1        2         -1         -0.606
+4 Georgia  Holland | Jaida  Reid | Kayla  Vitale | Sarah  C…  1.62       1        3         -1         -0.619
+5 Claudia  Hii | Jaida  Reid | Kayla  Vitale | Sarah  Carr …  0.567      1        3          3          5.29 
+6 Claudia  Hii | Emily  Maltezos | Jaida  Reid | Kayla  Vit…  0.0833     1        2          0          0    
+# A tibble: 73 × 15
+   player_1      player_2 id_1  id_2  minutes_together n_games_together net_per_minute expected_net_per_min…¹
+   <chr>         <chr>    <chr> <chr>            <dbl>            <int>          <dbl>                  <dbl>
+ 1 Talia D'Agos… Emilia … 1d52… 1f16…             25.0                3          1.28                   0.165
+ 2 Eleanor Boll… Emilia … 1e1b… 1f16…             17.0                3          1.23                   0.165
+ 3 Jaida  Reid   Nicolet… 21c3… 2383…             15.2                2          1.18                   0.165
+ 4 Nicoletta  K… Alana  … 2383… 2526…             15.2                2          0.923                  0.165
+ 5 Claudia  Hii  Emilia … 1c97… 1f16…             59.4                4          0.893                  0.165
+ 6 Georgia  Hol… Kayla  … 20b2… 22af…             20.0                3          0.851                  0.165
+ 7 Emilia Marin… Kayla  … 1f16… 22af…             35.7                3          0.840                  0.165
+ 8 Emilia Marin… Sarah  … 1f16… 260b…             34.6                4          0.838                  0.165
+ 9 Anastasia Gak Nicolet… 1bd7… 2383…             29.0                2          0.829                  0.165
+10 Claudia  Hii  Nicolet… 1c97… 2383…             24.9                2          0.802                  0.165
+# ℹ 63 more rows
+# ℹ abbreviated name: ¹​expected_net_per_minute
+# ℹ 7 more variables: connection_score <dbl>, `minutes_Leading by 6+` <dbl>,
+#   `minutes_Within 5 points` <dbl>, `minutes_Trailing by 6+` <dbl>, `games_Leading by 6+` <int>,
+#   `games_Within 5 points` <int>, `games_Trailing by 6+` <int>
+# ℹ Use `print(n = ...)` to see more rows
+                              fixtureId period clock_seconds       team  action detail
+1  3312ef8e-6923-11f0-a3ed-b920f19ce4b0      1            82        LTU timeOut   full
+2  3312ef8e-6923-11f0-a3ed-b920f19ce4b0      2            30        LTU timeOut   full
+3  3312ef8e-6923-11f0-a3ed-b920f19ce4b0      3           359        LTU timeOut   full
+4  3312ef8e-6923-11f0-a3ed-b920f19ce4b0      3           126       UTAS timeOut   full
+5  3312ef8e-6923-11f0-a3ed-b920f19ce4b0      4           318       UTAS timeOut   full
+6  3312ef8e-6923-11f0-a3ed-b920f19ce4b0      4           119       UTAS timeOut   full
+7  3312ef8e-6923-11f0-a3ed-b920f19ce4b0      4            22        LTU timeOut   full
+8  3320942c-6923-11f0-9c49-bd8a1a91e499      1           411        LTU timeOut   full
+9  3320942c-6923-11f0-9c49-bd8a1a91e499      2           441   AU Waatu timeOut   full
+10 3320942c-6923-11f0-9c49-bd8a1a91e499      2            92   AU Waatu timeOut   full
+11 3320942c-6923-11f0-9c49-bd8a1a91e499      3           207   AU Waatu timeOut   full
+12 3320942c-6923-11f0-9c49-bd8a1a91e499      4           437        LTU timeOut   full
+13 3320942c-6923-11f0-9c49-bd8a1a91e499      4           114   AU Waatu timeOut   full
+14 3320942c-6923-11f0-9c49-bd8a1a91e499      4            42   AU Waatu timeOut   full
+15 33363578-6923-11f0-8c0c-97d15b75d1e3      2           348         CU timeOut   full
+16 33363578-6923-11f0-8c0c-97d15b75d1e3      2           273        LTU timeOut   full
+17 33363578-6923-11f0-8c0c-97d15b75d1e3      4            12        LTU timeOut   full
+18 333885ec-6923-11f0-97f7-47012a3bc93d      2           152        LTU timeOut   full
+19 333885ec-6923-11f0-97f7-47012a3bc93d      2            34        LTU timeOut   full
+20 333885ec-6923-11f0-97f7-47012a3bc93d      3           201  UWA Maali timeOut   full
+21 333885ec-6923-11f0-97f7-47012a3bc93d      4           270  UWA Maali timeOut   full
+22 33277367-6923-11f0-b948-7d460ef4fb8e      1           228       MELB timeOut   full
+23 33277367-6923-11f0-b948-7d460ef4fb8e      2           260       MELB timeOut   full
+24 33277367-6923-11f0-b948-7d460ef4fb8e      3            63       MELB timeOut   full
+25 33277367-6923-11f0-b948-7d460ef4fb8e      4           340        LTU timeOut   full
+26 33277367-6923-11f0-b948-7d460ef4fb8e      4           195       MELB timeOut   full
+27 331a3f3d-6923-11f0-b9dc-179055402a37      2           500         VU timeOut   full
+28 331a3f3d-6923-11f0-b9dc-179055402a37      2           312        LTU timeOut   full
+29 331a3f3d-6923-11f0-b9dc-179055402a37      2            21         VU timeOut   full
+30 331a3f3d-6923-11f0-b9dc-179055402a37      3           438        LTU timeOut   full
+31 331a3f3d-6923-11f0-b9dc-179055402a37      3            58         VU timeOut   full
+32 331a3f3d-6923-11f0-b9dc-179055402a37      4           375        LTU timeOut   full
+33 331a3f3d-6923-11f0-b9dc-179055402a37      4           213         VU timeOut   full
+34 33291c46-6923-11f0-9e05-1bf379e1abc6      1           175        LTU timeOut   full
+35 33291c46-6923-11f0-9e05-1bf379e1abc6      2           353        UON timeOut   full
+36 33291c46-6923-11f0-9e05-1bf379e1abc6      2            50        UON timeOut   full
+37 33291c46-6923-11f0-9e05-1bf379e1abc6      4           433        UON timeOut   full
+38 33291c46-6923-11f0-9e05-1bf379e1abc6      4            43        UON timeOut   full
+39 33291c46-6923-11f0-9e05-1bf379e1abc6      4            34        UON timeOut   full
+40 33291c46-6923-11f0-9e05-1bf379e1abc6      4            11        LTU timeOut   full
+41 334fc5b8-6923-11f0-9dd7-81c966e042a8      1           424        LTU timeOut   full
+42 334fc5b8-6923-11f0-9dd7-81c966e042a8      1           197 UniSC Mari timeOut   full
+43 334fc5b8-6923-11f0-9dd7-81c966e042a8      2           257        LTU timeOut   full
+44 334fc5b8-6923-11f0-9dd7-81c966e042a8      3           261 UniSC Mari timeOut   full
+45 334fc5b8-6923-11f0-9dd7-81c966e042a8      4           418 UniSC Mari timeOut   full
+46 334fc5b8-6923-11f0-9dd7-81c966e042a8      4           282        LTU timeOut   full
+47 334fc5b8-6923-11f0-9dd7-81c966e042a8      4           122 UniSC Mari timeOut   full
+48 334fc5b8-6923-11f0-9dd7-81c966e042a8      4             3        LTU timeOut   full
+49 3341678c-6923-11f0-a62e-2b275baa3629      1           236        FED timeOut   full
+50 3341678c-6923-11f0-a62e-2b275baa3629      2           358        FED timeOut   full
+51 3341678c-6923-11f0-a62e-2b275baa3629      3           299        LTU timeOut   full
+52 a95d5341-9a9a-11f0-ab4f-63f2e2459c9e      1           253       MELB timeOut   full
+53 a95d5341-9a9a-11f0-ab4f-63f2e2459c9e      2           132        LTU timeOut   full
+54 a95d5341-9a9a-11f0-ab4f-63f2e2459c9e      3           371        LTU timeOut   full
+55 a95d5341-9a9a-11f0-ab4f-63f2e2459c9e      4           473       MELB timeOut   full
+56 a95d5341-9a9a-11f0-ab4f-63f2e2459c9e      4           329        LTU timeOut   full
+# A tibble: 1 × 3
+  n_stints rmse_baseline rmse_enhanced
+     <int>         <dbl>         <dbl>
+1      225          2.30          2.30
+# A tibble: 8 × 5
+  fixtureId                            n_stints rmse_baseline rmse_enhanced improved
+  <chr>                                   <int>         <dbl>         <dbl> <lgl>   
+1 331a3f3d-6923-11f0-b9dc-179055402a37       29          2.37          2.42 FALSE   
+2 3320942c-6923-11f0-9c49-bd8a1a91e499       21          2.44          2.44 TRUE    
+3 33277367-6923-11f0-b948-7d460ef4fb8e       32          2.32          2.38 FALSE   
+4 33291c46-6923-11f0-9e05-1bf379e1abc6       32          2.35          2.33 TRUE    
+5 33363578-6923-11f0-8c0c-97d15b75d1e3       33          2.22          2.16 TRUE    
+6 333885ec-6923-11f0-97f7-47012a3bc93d       30          1.91          1.88 TRUE    
+7 334fc5b8-6923-11f0-9dd7-81c966e042a8       23          2.25          2.27 FALSE   
+8 a95d5341-9a9a-11f0-ab4f-63f2e2459c9e       25          2.54          2.50 TRUE    
+# A tibble: 1 × 3
+  observed_gain permutation_p n_permutations
+          <dbl>         <dbl>          <dbl>
+1       0.00265         0.219           2000
+         team  n
+1        UTAS 12
+2  UniSC Mari 12
+3        MELB 11
+4        USYD 11
+5    AU Waatu 10
+6          CU 10
+7         LTU 10
+8        UNSW 10
+9         FED  9
+10        UON  9
+11  UWA Maali  9
+12         VU  9
+# A tibble: 12 × 3
+   season team       eigenvector_centralization
+   <chr>  <chr>                           <dbl>
+ 1 2025   UTAS                           1     
+ 2 2025   USYD                           0.397 
+ 3 2025   LTU                            0.325 
+ 4 2025   MELB                           0.278 
+ 5 2025   UniSC Mari                     0.274 
+ 6 2025   CU                             0.211 
+ 7 2025   AU Waatu                       0.181 
+ 8 2025   FED                            0.0521
+ 9 2025   UON                            0.0414
+10 2025   UWA Maali                      0.0364
+11 2025   UNSW                           0.0359
+12 2025   VU                             0.0146
+         team  n
+1        USYD 12
+2        UTAS 12
+3        MELB 11
+4         UON 11
+5    AU Waatu 10
+6         LTU 10
+7        UNSW 10
+8   UWA Maali 10
+9          CU  9
+10        FED  9
+11 UniSC Mari  9
+12         VU  9
+# A tibble: 12 × 3
+   league       team       eigenvector_centralization
+   <chr>        <chr>                           <dbl>
+ 1 UBL Men 2025 UON                            1     
+ 2 UBL Men 2025 MELB                           0.805 
+ 3 UBL Men 2025 USYD                           0.538 
+ 4 UBL Men 2025 UTAS                           0.429 
+ 5 UBL Men 2025 LTU                            0.164 
+ 6 UBL Men 2025 UWA Maali                      0.163 
+ 7 UBL Men 2025 AU Waatu                       0.110 
+ 8 UBL Men 2025 CU                             0.0960
+ 9 UBL Men 2025 VU                             0.0600
+10 UBL Men 2025 UNSW                           0.0351
+11 UBL Men 2025 FED                            0.0245
+12 UBL Men 2025 UniSC Mari                     0.0154
+# A tibble: 2 × 4
+  league          gini top_team top_score
+  <chr>          <dbl> <chr>        <dbl>
+1 UBL Women 2025 0.527 UTAS             1
+2 UBL Men 2025   0.569 UON              1
