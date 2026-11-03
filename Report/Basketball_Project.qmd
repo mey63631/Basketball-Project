@@ -1,5 +1,5 @@
 ---
-title: "Basketball Analysis - UBL women's basketball, 2025"
+title: "Player-Pair Connections and Rotation Networks in La Trobe University Women’s Basketball: UBL 2025"
 unit: "ETC5543 - Business analytics creative activity"
 author: Mey Siv
 date: "`r Sys.Date()`"
@@ -52,7 +52,7 @@ geometry:
 ```{r}
 #| label: setup
 #| include: false
-# The report reads outputs saved by R/LTU-team.R, R/LTU-prediction.R, R/LTU-network-by-game.R and LTU-league-comparison.R
+# The report reads outputs saved by R/LTU-team.R, R/LTU-prediction.R, R/LTU-network-by-game.R and R/LTU-league-comparison.R
 # It does not download data when rendered.
 library(dplyr); library(tidyr); library(ggplot2); library(stringr)
 library(readr); library(knitr); library(scales)
@@ -70,6 +70,11 @@ theme_report <- function(base_size = 9) {
 theme_set(theme_report())
 
 fmt <- function(x, d = 2) formatC(x, format = "f", digits = d)
+ordinal <- function(n) {
+  suffix <- ifelse(n %% 100 %in% 11:13, "th",
+                   c("th", "st", "nd", "rd", "th", "th", "th", "th", "th", "th")[(n %% 10) + 1])
+  paste0(n, suffix)
+}
 gini_coefficient <- function(x) {
   x <- sort(as.numeric(x[is.finite(x)]))
   n <- length(x)
@@ -80,7 +85,6 @@ read_out <- function(f) {
   read_csv(file.path("..", "outputs", "tables", f), show_col_types = FALSE)
 }
 
-
 # ---- saved outputs ----
 pair_tbl <- read_out("LTU_final_pair_connection_table.csv") |>
   mutate(across(c(player_1, player_2), str_squish))
@@ -89,51 +93,49 @@ ratings <- read_out("LTU_rapm_ratings_full_precision.csv")
 net     <- read_out("LTU_centrality_network.csv")
 ss      <- read_out("LTU_score_state_coverage.csv")
 rc      <- read_out("LTU_reconstruction_checks.csv")
-sl <- read_out("LTU_situational_lineup_summary.csv")
+sl      <- read_out("LTU_situational_lineup_summary.csv")
 pg      <- read_out("LTU_prediction_per_game.csv")
 po      <- read_out("LTU_prediction_overall.csv")
 women   <- read_out("LTU_team_eigenvector_women.csv") |> arrange(desc(eigenvector_centralization))
 men     <- read_out("LTU_team_eigenvector_men.csv") |> arrange(desc(eigenvector_centralization))
 clutch  <- read_out("LTU_clutch_coverage.csv")
-glab <- read_out("LTU_game_labels.csv") 
+glab    <- read_out("LTU_game_labels.csv")
 perm    <- read_out("LTU_prediction_permutation.csv")
 pstints <- read_out("LTU_prediction_stints.csv")
 coverage_all <- read_out("LTU_game_coverage_all.csv")
+players_all  <- read_out("LTU_player_game_participation.csv")$player_name
+pair_resid   <- read_out("LTU_pair_vs_player_residual.csv")
+sens    <- read_out("LTU_sensitivity.csv")
 
-# raw-data cache: used only for counts and the extraction date
-pbp_file <- file.path(
-  "..", "data", "raw", "LTU_women_inputs_2025.rds"
-)
-
+# saved input snapshot: used only for counts and the export time
+pbp_file <- file.path("..", "data", "raw", "LTU_women_inputs_2025.rds")
 inputs <- readRDS(pbp_file)
 n_events <- nrow(inputs$LTU_pbp)
 n_available <- n_distinct(inputs$LTU_pbp$fixtureId)
 snapshot_saved_at <- inputs$saved_at
 rm(inputs)
 
-# ---- anonymise players (same mapping as the presentation) ----
-player_names <- sort(unique(c(pair_tbl$player_1, pair_tbl$player_2, cent$player_name)))
+# ---- anonymise players ----
+player_names <- sort(unique(str_squish(players_all)))
 player_names <- player_names[!is.na(player_names) & nzchar(player_names)]
 player_labels <- setNames(paste("Player", seq_along(player_names)), player_names)
-anon <- function(x) unname(player_labels[str_squish(x)])
+anon <- function(x) {
+  labels <- unname(player_labels[str_squish(x)])
+  if (any(is.na(labels) & !is.na(x))) {
+    stop("Some player names have no display label.")
+  }
+  labels
+}
 pair_tbl <- pair_tbl |> mutate(player_1 = anon(player_1), player_2 = anon(player_2))
 cent <- cent |> mutate(player_name = anon(player_name))
 ```
-
 
 ```{r}
 #| label: derived
 #| include: false
 n_retained <- n_distinct(rc$fixtureId)
-n_positive <- sum(
-  pair_tbl$stability == "Stable positive",
-  na.rm = TRUE
-)
-n_negative <- sum(
-  pair_tbl$stability == "Stable negative",
-  na.rm = TRUE
-)
 n_match <- sum(abs(rc$coverage - 1) < 1e-8 & rc$score_check == "Match", na.rm = TRUE)
+excl <- coverage_all |> filter(!retained)
 
 n_pairs <- nrow(pair_tbl)
 top5 <- slice_max(pair_tbl, connection_score, n = 5, with_ties = FALSE)
@@ -141,9 +143,9 @@ bot5 <- slice_min(pair_tbl, connection_score, n = 5, with_ties = FALSE)
 top_counts <- sort(table(c(top5$player_1, top5$player_2)), decreasing = TRUE)
 star_player <- names(top_counts)[1]
 star_n <- as.integer(top_counts[1])
-stab <- table(factor(pair_tbl$stability, 
+stab <- table(factor(pair_tbl$stability,
   levels = c("Stable positive", "Uncertain", "Stable negative", "Insufficient stability evidence")))
-excl <- coverage_all |> filter(!retained)
+
 n_adequate <- sum(sl$minutes >= 5 & sl$games >= 2, na.rm = TRUE)
 cent <- cent |> mutate(strength_rank = rank(-weighted_strength))
 top_btw <- slice_max(cent, weighted_betweenness, n = 2, with_ties = FALSE)
@@ -154,34 +156,43 @@ stopifnot(!anyDuplicated(glab$fixtureId))
 pg <- pg |> left_join(glab |> select(fixtureId, game), by = "fixtureId")
 stopifnot(!anyNA(pg$game))
 
+rho_pair_player <- cor(pair_resid$connection_score, pair_resid$mean_player_residual,
+                       method = "spearman", use = "complete.obs")
+
 ss <- ss |> mutate(share = total_minutes / sum(total_minutes))
 share_of <- function(s) fmt(100 * ss$share[ss$score_state == s], 0)
 
 wcor <- cov.wt(cbind(pstints$pair_feature, pstints$actual - pstints$base_pred),
                wt = pstints$duration_sec / sum(pstints$duration_sec), cor = TRUE)$cor[1, 2]
+rmse_diff <- po$rmse_baseline - po$rmse_enhanced
+
+# sensitivity summaries (read from the saved sensitivity table)
+sens_1se  <- sens |> filter(lambda_choice == "lambda.1se")
+sens_lmin <- sens |> filter(lambda_choice == "lambda.min")
+n_pairs_min <- function(m) sens_1se$n_pairs[sens_1se$min_minutes == m][1]
 
 gini_w <- gini_coefficient(women$eigenvector_centralization)
 gini_m <- gini_coefficient(men$eigenvector_centralization)
+conc_word <- ifelse(gini_m > gini_w, "more", "less")
 ```
 
-# Abstract (Summary)
+# Abstract {.unnumbered}
 
-Coaches substitute players constantly, but individual statistics such as points and plus-minus cannot show which combinations work well together, because a player’s results also depend on her teammates, her opponents and her playing time. This project examines player-pair performance and rotation structure in La Trobe University’s (LTU) women’s team in the 2025 University Basketball League (UBL). Event-level play-by-play data were used to reconstruct five-player lineups and same-lineup intervals (“stints”) for `r n_retained` of `r n_available` games. 
+Coaches substitute players constantly, but individual statistics such as points and plus-minus cannot show which combinations work well together, because a player's results also depend on her teammates, her opponents and her playing time. This project examines player-pair performance and rotation structure in La Trobe University's (LTU) women's team in the 2025 University Basketball League (UBL). Event-level play-by-play data were used to reconstruct five-player lineups and same-lineup intervals ("stints") for `r n_retained` of `r n_available` games.
 
-A duration-weighted ridge regression (RAPM-style) estimated net points per minute from the LTU players on court and the opponent team. A pair’s connection score was the duration-weighted average gap between actual and predicted performance in the stints the pair shared, reported for pairs with at least 15 minutes together across at least two games. Of `r n_pairs` eligible pairs, `r stab[["Stable positive"]]` were stable positive and `r stab[["Stable negative"]]` stable negative under leave-one-game-out refits, and `r star_player` appeared in `r star_n` of the five highest-scoring pairs. Adding pair scores did not clearly improve prediction of held-out games (duration-weighted RMSE `r fmt(po$rmse_baseline, 3)` versus `r fmt(po$rmse_enhanced, 3)`), so the scores are best used to prioritise video review, not to change rotations. Interpretation is limited by the small sample, reconstructed lineups and the use of minutes rather than possessions.
+A duration-weighted ridge regression (RAPM-style) estimated net points per minute from the LTU players on court and the opponent team. A pair's connection score was the duration-weighted average gap between actual and predicted performance in the stints the pair shared, reported for pairs with at least 15 minutes together across at least two games. Of `r n_pairs` eligible pairs, `r stab[["Stable positive"]]` were stable positive and `r stab[["Stable negative"]]` stable negative under leave-one-game-out refits, and `r star_player` appeared in `r star_n` of the five highest-scoring pairs. Under an alternative penalty rule, rankings had Spearman correlations of `r fmt(min(sens_lmin$spearman, na.rm = TRUE), 3)` to `r fmt(max(sens_lmin$spearman, na.rm = TRUE), 3)` with the main scores. Adding pair scores did not clearly improve prediction of held-out games (duration-weighted RMSE `r fmt(po$rmse_baseline, 3)` versus `r fmt(po$rmse_enhanced, 3)`), so the scores are best used to prioritise video review, not to change rotations. Interpretation is limited by the small sample, reconstructed lineups and the use of minutes rather than possessions.
 
 \clearpage
 
 # Background and Motivation
 
-Coaches must decide which players to use together and when to change a lineup. Individual statistics describe aspects of player performance, but they do not establish how particular combinations perform with each other. A player's plus-minus also reflects the teammates, opponents and game situations encountered during that particular player's minutes on court [@rosenbaum2004].
+Coaches must decide which players to use together and when to change a lineup. Individual statistics describe aspects of player performance, but they do not establish how particular combinations perform with each other. A player's plus-minus also reflects the teammates, opponents and game situations encountered during her minutes on court [@rosenbaum2004].
 
-Adjusted plus-minus addresses part of this problem by regressing scoring margin on indicators for the players on court [@rosenbaum2004]. Because players repeatedly appear together, the indicators are strongly correlated and estimates can be unstable. Ridge regression penalises large coefficients to stabilise estimation [@hoerl1970], and @sill2010 motivated regularisation and out-of-sample testing for adjusted plus-minus. Network methods offer a complementary view: players or teams are nodes, and centrality measures describe their position in the network [@wasserman1994]. Eigenvector-based methods have also been used to rank teams from game results [@keener1993].
+Adjusted plus-minus addresses part of this problem by regressing scoring margin on indicators for the players on court [@rosenbaum2004]. Because players repeatedly appear together, the indicators are strongly correlated and estimates can be unstable. Ridge regression penalises large coefficients to stabilise estimation [@hoerl1970], and @sill2010 motivated regularisation and out-of-sample testing for adjusted plus-minus. Network methods offer a complementary view: players or teams are nodes, and centrality measures describe their position in the network [@wasserman1994]. Basketball teams have been analysed as networks of ball movement between players [@fewell2012], and eigenvector-based methods have been used to rank teams from game results [@keener1993].
 
-Most adjusted plus-minus work targets individual ratings. Pairs are harder, because the number of parameters grows quickly while the number of games stays small. For LTU women's basketball, an analysis of shared playing time offers a way to organise evidence about combinations and rotation patterns. Positive performance during a pair's shared minutes may indicate a combination worth investigating, but it can also reflect with the other three teammates, favourable match-ups or short-term scoring variation. Pair rankings therefore need exposure information and validation before they can inform coaching decisions.
+Most adjusted plus-minus work targets individual ratings. Pairs are harder, because the number of parameters grows quickly while the number of games stays small. For LTU women's basketball, an analysis of shared playing time offers a way to organise evidence about combinations and rotation patterns. Positive performance during a pair's shared minutes may indicate a combination worth investigating, but it can also reflect the contributions of the other three teammates, favourable match-ups or short-term scoring variation. Pair rankings therefore need exposure information and validation before they can inform coaching decisions.
 
-This project combines an adjusted performance summary with a network description of player deployment. It separates three questions: which combinations were associated with above-prediction performance, how players were connected through shared minutes, and whether the estimated pair scores improved predictions in other games.
-
+This project was carried out in collaboration with La Trobe University. It combines an adjusted performance summary with a network description of player deployment. It separates three questions: which combinations were associated with above-prediction performance, how players were connected through shared minutes, and whether the estimated pair scores improved predictions in other games.
 
 \clearpage
 
@@ -189,20 +200,21 @@ This project combines an adjusted performance summary with a network description
 
 The primary question is: during which LTU pairings did the team perform better or worse than predicted by an additive model of its on-court players and opponent team?
 
-The analysis has four objectives:
+The analysis has five objectives:
 
 1. Reconstruct on-court lineups from event-level data and document the reliability of that reconstruction.
 2. Calculate pair connection scores relative to an additive lineup model, reporting shared minutes and games alongside each score.
 3. Describe rotation structure through a network weighted by shared playing time, and examine exposure across game situations.
-4. Assess sensitivity to individual games and evaluate whether a pair-score adjustment improves held-out prediction.
+4. Assess sensitivity to individual games and analyst choices, and evaluate whether a pair-score adjustment improves held-out prediction.
+5. Provide league context by comparing team eigenvector centrality scores in the women's and men's competitions.
 
-The practical contribution is a workflow for turning play-by-play records into evidence that can guide coaching review. The analytical contribution is the integration of lineup reconstruction, regularised modelling, network summaries and game-level validation within a small single-team dataset. The project does not identify causal player chemistry or an optimal rotation.
+The data are play-by-play records for ten LTU games (`r n_retained` retained after screening), final results for all league games, and the methods are described in @sec-methods. The practical contribution is a workflow for turning play-by-play records into evidence that can guide coaching review. The analytical contribution is the integration of established methods (lineup reconstruction, regularised modelling, network summaries and game-level validation) within a small single-team dataset. The project does not identify causal player chemistry or an optimal rotation.
 
 ## Project contributions
 
-- **Data collection:** a script that retrieves fixtures and play-by-play events from the competition feed, adapts to a change in the feed's response format, and saves extracted input tables for subsequent analysis. 
+- **Data collection:** a script that retrieves fixtures and play-by-play events from the competition feed, adapts to a change in the feed's response format, and saves extracted input tables for subsequent analysis.
 - **Data processing:** a lineup and stint reconstruction algorithm with built-in checks, including a game-coverage screen and a comparison of reconstructed scores with the feed's scoring events.
-- **Modelling and validation:** a regularised lineup model, pair connection scores, leave-one-game-out stability and a held-out prediction test.
+- **Modelling and validation:** a regularised lineup model, pair connection scores, leave-one-game-out stability, sensitivity checks and a held-out prediction test.
 - **Networks and visualisation:** shared-minute networks with centrality and concentration measures, and anonymised figures for reporting.
 - **Reproducibility:** analysis scripts that run in a fixed order and save the outputs this report reads (Appendix A).
 
@@ -212,16 +224,16 @@ The practical contribution is a workflow for turning play-by-play records into e
 
 ## Source and scope
 
-The data concern LTU women's games in the 2025 UBL. Fixture and play-by-play records were supplied by the Sportradar feed used for the competition. Fields include fixture identifiers, period, game clock, team, player identifier, event type, event subtype, substitution direction and scoring outcome. Persistent player identifiers are used for processing. To protect privacy, players are reported as Player 1 to Player 16 throughout.
+The data concern LTU women's games in the 2025 UBL. Fixture and play-by-play records were retrieved from the Sportradar feed embedded in the UniSport UBL website. Fields include fixture identifiers, period, game clock, team, player identifier, event type, event subtype, substitution direction and scoring outcome. Persistent player identifiers are used for processing. To protect privacy, players are reported as Player 1 to Player `r length(player_labels)` throughout.
 
-The saved play-by-play input contains `r n_available` LTU games and `r format(n_events, big.mark = ",")` events. Of these games, `r n_retained` were retained after excluding games with reconstructed LTU playing-time coverage below 50% of an assumed 40-minute game. Among the retained games, `r n_match` had complete reconstructed coverage and matching scoring totals. The other `r n_retained - n_match` games had coverage ranging from `r fmt(100 * min(rc$coverage, na.rm = TRUE), 1)`% to `r fmt(100 * max(rc$coverage[rc$coverage < 1 - 1e-8], na.rm = TRUE), 1)`%. Retention therefore does not establish complete coverage or correct lineup identities. @tbl-audit summarises coverage and scoring checks for the retained games.
+The saved play-by-play input contains `r n_available` LTU games and `r format(n_events, big.mark = ",")` events. Of these games, `r n_retained` were retained after excluding games with reconstructed LTU playing-time coverage below 50% of an assumed 40-minute game. Among the retained games, `r n_match` had complete reconstructed coverage and matching scoring totals. The other `r n_retained - n_match` games had coverage ranging from `r fmt(100 * min(rc$coverage, na.rm = TRUE), 1)`% to `r fmt(100 * max(rc$coverage[rc$coverage < 1 - 1e-8], na.rm = TRUE), 1)`%. Retention therefore does not establish complete coverage or correct lineup identities. @tbl-audit summarises the coverage and scoring checks for the retained games.
 
-Two of the ten games were excluded because lineup tracking failed: in each, a starter had no recorded action before her team’s first substitution, so the opening lineup was incomplete and errors accumulated through the game (reconstructed coverage about 13% of regulation time, against at least `r fmt(100*min(rc$coverage),0)`% for retained games). League-wide results for both competitions come from the same feed. 
+Of the `r n_available` games, `r nrow(excl)` were excluded because lineup tracking became unreliable early in the game: after the first substitutions, the inferred roster drifted away from five players, which is consistent with an incorrect inferred opening lineup. Reconstructed LTU coverage in these games was `r fmt(100 * min(excl$pct_of_full_game), 0)`% to `r fmt(100 * max(excl$pct_of_full_game), 0)`% of regulation time, below the 50% threshold. The checks cannot show whether the underlying event records were incomplete.
 
 ```{r}
 #| label: tbl-audit
 #| tbl-cap: "Reconstruction checks for retained LTU games. Coverage is reconstructed playing time as a percentage of an assumed 40-minute game. Point totals are shown as LTU–opponent."
-audit_tbl <- rc |> left_join(glab, by = "fixtureId") |> arrange(fixtureId) |> 
+audit_tbl <- rc |> left_join(glab, by = "fixtureId") |> arrange(fixtureId) |>
   transmute(
     Game = game,
     `Coverage (%)` = round(100 * coverage, 1),
@@ -241,28 +253,34 @@ audit_tbl <- rc |> left_join(glab, by = "fixtureId") |> arrange(fixtureId) |>
 kable(audit_tbl, booktabs = TRUE, align = "rrlll")
 ```
 
-
 ## Lineup reconstruction
 
 Within each game, events are ordered by period and descending game clock, preserving source order for tied timestamps. Opening lineups are inferred from distinct players with recorded actions before the team's first substitution. Where five starters cannot be identified, lineup tracking may fail or be incomplete.
 
-Substitutions update the inferred on-court roster. Consecutive substitution events at the same timestamp are processed together, and stints are closed at substitution times and period boundaries. A stint is a continuous interval during which the inferred lineup is unchanged. Points scored and conceded (made two-point and three-point shots, and made free throws) are accumulated within each stint.
+Substitutions update the inferred on-court roster. Consecutive substitution events at the same timestamp are processed together, and stints are closed at substitution times and period boundaries. A stint is a continuous interval during which the inferred lineup is unchanged. Points scored and conceded (made two-point shots, three-point shots and free throws) are accumulated within each stint.
 
-The final lineup of a period is carried into the next period. The implementation checks for activity inconsistent with that lineup but flags discrepancies rather than correcting them. This is an assumption of reconstruction procedure: players can change between periods without an in-period substitution record. The reconstruction procedure flagged no quarter-break lineup discrepancies in the saved-input analysis. This does not independently verify lineup identities.
+The final lineup of a period is carried into the next period. The implementation checks for activity inconsistent with that lineup but flags discrepancies rather than correcting them. This is an assumption of the reconstruction procedure: players can change between periods without an in-period substitution record. The procedure flagged no quarter-break lineup discrepancies in the saved-input analysis. This does not independently verify lineup identities.
 
-Stints shorter than 15 seconds are excluded from regression and connection scoring to reduce extreme rate estimates. The rotation-network calculations use a separate sample of all positive-duration stints. The two samples therefore differ in total minutes and pair counts.
+Stints shorter than 15 seconds are excluded from regression and connection scoring to reduce extreme rate estimates. The rotation-network calculations use a separate sample of all positive-duration stints, so the two samples differ in total minutes and pair counts.
 
+**Algorithm 1: Stint reconstruction and screening**
+
+1. For each fixture, order events by period, descending game clock and original source order.
+2. Infer each team's opening lineup from distinct players with recorded actions before its first substitution.
+3. At a substitution event, close the current stint, then process consecutive substitution records sharing the same period and timestamp in source order.
+4. Accumulate points from made two-point shots, three-point shots and free throws within the current stint.
+5. At each period boundary, close the stint and carry the final lineup forward, flagging activity inconsistent with that lineup.
+6. Record stint duration, both inferred lineups, points scored and conceded, and the score margin at stint start.
+7. Exclude games below 50% reconstructed LTU playing-time coverage.
+8. For regression and connection scoring, retain stints lasting at least 15 seconds.
 
 ## Data provenance and quality
 
-The data were retrieved from the Sportradar feed embedded in the UniSport UBL website. All results in this report use the saved input snapshot `data/raw/LTU_women_inputs_2025.rds`, containing `r format(n_events, big.mark = ",")` play-by-play events across `r n_available` LTU games. The snapshot records its export time as `r snapshot_saved_at`; this is not necessarily the original collection date. Rendering the report does not download new data.
+All results in this report use the saved input snapshot `data/raw/LTU_women_inputs_2025.rds`, containing `r format(n_events, big.mark = ",")` play-by-play events across `r n_available` LTU games. The snapshot records its export time as `r snapshot_saved_at`; this is not necessarily the original collection date. Rendering the report does not download new data. The extraction function was adapted to handle different API response structures encountered during the project, and because the live feed may change, the saved inputs keep the analysis consistent across reruns.
 
-The extraction function was adapted to handle different API response structures encountered during the project. Because the live feed may change, the saved inputs are used to keep the analysis consistent across reruns.
+Reconstruction checks compare accumulated stint scores with totals calculated from scoring events in the same feed. Scoring totals matched in `r sum(rc$score_check == "Match", na.rm = TRUE)` of `r nrow(rc)` retained games (@tbl-audit), and the checks recorded `r sum(rc$negative_duration, na.rm = TRUE)` negative-duration stints. In `r n_retained - n_match` retained games, coverage was incomplete or scoring totals differed from the feed, which may affect player and pair estimates.
 
-Reconstruction checks compare accumulated stint scores with totals calculated from scoring events in the same feed. Scoring totals matched in `r sum(rc$score_check == "Match", na.rm = TRUE)` of `r nrow(rc)` retained games (@tbl-audit). The checks recorded `r sum(rc$negative_duration, na.rm = TRUE)` negative-duration stints. `r n_retained - n_match` retained games had incomplete reconstructed coverage and differences in scoring totals, which may affect player and pair estimates.
-
-These checks assess internal consistency rather than accuracy against an independent source. Complete playing-time coverage and matching scores do not verify every lineup: an inferred lineup can contain five players while identifying the wrong five. No independent validation against official scores or video is established by these checks.
-
+These checks assess internal consistency rather than accuracy against an independent source. Complete playing-time coverage and matching scores do not verify every lineup: an inferred lineup can contain five players while identifying the wrong five. The checks establish no independent validation against official scores or video.
 
 \clearpage
 
@@ -282,13 +300,15 @@ $$
 y_s = \beta_0 + \sum_p \beta_p x_{sp} + \sum_o \delta_o z_{so} + \varepsilon_s,
 $$ {#eq-model}
 
-where $x_{sp}=1$ if LTU player $p$ is on court and $z_{so}=1$ if the opponent is team $o$. The model uses duration weights, so longer stints contribute more to fitting.
+where $x_{sp}=1$ if LTU player $p$ is on court and $z_{so}=1$ if the opponent is team $o$. The model uses duration weights, so longer stints contribute more to fitting. The fitted prediction for stint $s$ is denoted $\hat y_s$.
 
 Ridge regression is used because the player indicators are strongly related: players repeatedly appear together, and each valid lineup contains five players. The model is fitted with the `glmnet` package [@friedman2010] using $\alpha = 0$, which minimises (up to the scaling used by `glmnet`)
 
 $$
 \sum_s d_s\Big(y_s-\beta_0-\sum_p \beta_p x_{sp}-\sum_o \delta_o z_{so}\Big)^2 + \lambda\Big(\sum_p \beta_p^2+\sum_o \delta_o^2\Big).
 $$ {#eq-ridge}
+
+The implementation uses `glmnet`'s default predictor standardisation, so the ridge penalty operates on coefficients for standardised predictors. The equation presents the model's structure; the coefficients returned by the software are expressed on the original predictor scale.
 
 Entire games are assigned to cross-validation folds, and the penalty $\lambda$ is the largest value whose cross-validation error is within one standard error of the minimum (`lambda.1se`).
 
@@ -310,19 +330,35 @@ The prediction behind each residual includes the intercept, all five LTU player 
 
 Pairs are reported when they share at least 15 model-eligible minutes across at least two games. These thresholds reduce reliance on brief appearances but do not guarantee precise estimates, so each score is reported with minutes, games and a stability summary.
 
+### Interpreting a connection score
+
+A hypothetical example illustrates how the score is calculated. Suppose LTU outscores its opponent by four points during a two-minute stint. Observed net performance is therefore two points per minute. If the additive model predicts one net point per minute for that lineup and opponent, the stint residual is positive one net point per minute. This residual contributes to the connection score of each of the ten pairs in the five-player lineup.
+
+Suppose one of those pairs also shares a four-minute stint with a residual of negative 0.5 net points per minute. Across these two stints, its duration-weighted residual is zero: the two-minute positive contribution is offset by the longer negative contribution. These hypothetical six shared minutes would not themselves meet the study's 15-minute eligibility threshold.
+
+The example shows why connection scores depend on both performance and exposure. It also shows why they cannot isolate chemistry between two players: the same residual is attributed descriptively to several overlapping pairs, while the other teammates and game circumstances also contribute to the outcome.
+
+### Pair scores and player-level residuals
+
+As an exploratory diagnostic, each player's duration-weighted mean stint residual was calculated across her model-eligible stints. For each eligible pair, the two player-level means were averaged and compared with the pair connection score using Spearman rank correlation. Both quantities are derived from the same stint residuals, so this comparison describes the overlap between the summaries rather than independently identifying individual or pair effects.
 
 ## Leave-one-game-out sign stability
 
-Each retained game is removed in turn, the model is refitted, and eligible pair scores are recalculated. A pair is classified as stable positive if its score is positive in at least 80% of available refits, and stable negative if that proportion is at most 20%. Other pairs are classified as uncertain. Pairs with fewer than half as many estimates as retained games are labelled as having insufficient stability evidence; with eight games, at least four valid estimates are needed. 
+Each retained game is removed in turn, the model is refitted, and eligible pair scores are recalculated. A pair is classified as stable positive if its score is positive in at least 80% of available refits, and stable negative if that proportion is at most 20%. Other pairs are classified as uncertain. Pairs with fewer than half as many estimates as retained games are labelled as having insufficient stability evidence; with eight games, at least four valid estimates are needed.
 
 These labels describe sensitivity to omitting a game. They are not confidence intervals or significance tests, and they are not evidence of future predictive performance. Each refit reuses most of the same games, so the labels are far from independent validation.
 
+## Sensitivity to penalty selection and exposure thresholds
+
+The main analysis uses `lambda.1se` and requires 15 shared minutes across at least two games. Alternative specifications used `lambda.min` and shared-time thresholds of 10 and 20 minutes, retaining the two-game requirement. Comparisons with the main analysis used pairs eligible under both specifications. Spearman correlation summarised agreement in ranking, and sign agreement measured the proportion of pairs retaining the same positive or negative sign.
+
+The exposure threshold determines which pairs are reported. Under a fixed penalty rule, changing this threshold does not change the scores of the pairs that remain eligible, so agreement across thresholds is expected by construction. Changing the penalty rule provides a separate check because it changes the fitted baseline and the residuals.
 
 ## Rotation networks and game situations
 
-A separate undirected usage network has players as nodes and shared playing time as edges. A pair enters the network after at least one shared minute in at least one game, unlike the stricter connection-score threshold. Weighted strength is the sum of a player's edge weights. Weighted betweenness is calculated using inverse shared minutes as network distances, so frequently used pairings are treated as shorter connections [@freeman1978].
+A separate undirected usage network has players as nodes and shared playing time as edges. A pair enters the network after at least one shared minute in at least one game, unlike the stricter connection-score threshold. Weighted strength is the sum of a player's edge weights. Weighted betweenness is calculated using inverse shared minutes as network distances, so frequently used pairings are treated as shorter connections [@freeman1978; @csardi2006].
 
-High betweenness indicates a position on shortest paths in this shared-minute network. It does not measure ball movement, leadership, passing skill or causal importance. Weighted strength is closely tied to exposure, since each minute played adds roughly four shared-player minutes.
+High betweenness indicates a position on shortest paths in this shared-minute network. It does not measure ball movement, leadership, passing skill or causal importance. Weighted strength is closely tied to exposure, since each minute played adds roughly four shared-player minutes. @fewell2012 examined basketball teams as networks of ball movement between players; this project uses a different relationship, shared court time, so its centrality measures describe rotation structure rather than passing patterns.
 
 Concentration is summarised with the Gini coefficient, where 0 means equal and 1 means fully concentrated. Freeman's betweenness centralisation is computed on the unweighted network, because its normalising constant is derived for unweighted graphs [@freeman1978].
 
@@ -330,17 +366,57 @@ Game situations use the score margin at stint start: leading by at least six, wi
 
 ## Held-out prediction
 
-In each outer evaluation fold, one game is held out. The baseline model, including penalty selection, is fitted on the other games, and pair scores are also computed from those games. For each test lineup, the ten pair scores are averaged (missing scores count as zero) and added to the baseline prediction. This is a fixed-coefficient heuristic, not a fitted interaction model. 
+In each outer evaluation fold, one game is held out. The baseline model, including penalty selection, is fitted on the other games, and pair scores are also computed from those games. For each test lineup, the ten pair scores are averaged (missing scores count as zero) and added to the baseline prediction. This is a fixed-coefficient heuristic, not a fitted interaction model.
 
 Predictions are compared using duration-weighted root mean squared error,
 
 $$
-\mathrm{WRMSE}=\sqrt{\frac{\sum_s d_s(y_s-\hat y_s)^2}{\sum_s d_s}}.
+\mathrm{WRMSE}=\sqrt{\frac{\sum_s d_s(y_s-\hat y_s)^2}{\sum_s d_s}},
 $$ {#eq-wrmse}
 
-As an exploratory benchmark, the held-out pair feature is shuffled across pooled stints 2,000 times and the error improvement is recomputed. The reported p-value is the share of shuffled improvements at least as large as the observed one. Pooled shuffling ignores dependence within games, so this p-value is indicative rather than definitive.
+where $\hat y_s$ is the held-out prediction from the model being evaluated.
+
+As an exploratory benchmark, the held-out pair feature is shuffled across pooled stints 2,000 times, with a fixed random seed, and the error improvement is recomputed. The reported p-value is the share of shuffled improvements at least as large as the observed one. Pooled shuffling ignores dependence within games, so this p-value is indicative rather than definitive.
 
 Test players and opponents not seen in training receive no coefficient. Most opponents were met in only one retained game, so for those games the opponent term is unavailable and the baseline relies on the players and the intercept.
+
+## Interpreting the validation checks
+
+The analysis uses several checks that address different sources of uncertainty. Reconstruction diagnostics assess whether inferred playing time and accumulated scores are internally consistent with the event feed. They help identify missing coverage and scoring discrepancies, but cannot establish whether every player was correctly identified.
+
+Leave-one-game-out sign stability and the sensitivity checks assess how much the descriptive results depend on individual games and analyst choices. A consistent sign suggests that a result is not entirely dependent on a single game, but the refits share most of their observations, and consistency does not establish predictive usefulness.
+
+Held-out prediction asks a separate question: whether the specified adjustment helps predict an omitted game. That game's outcomes are excluded from baseline fitting, penalty selection and pair-score estimation. The overall weighted RMSE pools the held-out stint errors using their durations; it is not the arithmetic mean of the game-level RMSE values. Together, these checks distinguish internal consistency, sensitivity to observed games and analyst choices, and performance beyond the estimation sample.
+
+## League-level results networks
+
+The league comparison examines a different level of basketball organisation from the LTU player analysis. In the player networks, nodes represent players and edges describe shared court time or above-prediction performance. In the league networks, nodes represent university teams and edges describe match results. The purpose is to place the LTU analysis within a broader description of the recorded competition, rather than to validate the player-pair scores. Women's and men's results are analysed separately because they concern different teams, players and fixtures.
+
+Each network uses eligible confirmed results with recorded scores from the saved input snapshots. The team-level analysis does not require reconstructed player lineups. Consequently, excluding an LTU game because of insufficient play-by-play reconstruction coverage does not remove its result from the league comparison: a game can have a usable final result even when its event records do not support reliable lineup reconstruction.
+
+### Constructing the season network
+
+Each participating team is represented by one node. Every eligible match contributes a directed edge from the losing team to the winning team, with weight equal to the absolute difference between their scores. For example, if Team A defeats Team B 75–65, the match contributes an edge from B to A with weight 10. This is a hypothetical example illustrating the construction, not a result from the dataset.
+
+The direction allows winning teams to receive incoming connections from the teams they defeated. Winning margin determines the strength of each connection, so a larger victory contributes more weight than a narrow victory. This choice uses information beyond the binary win–loss outcome, but it also gives unusually large margins substantial influence.
+
+The implementation retains a separate edge for each match, so repeated results between the same teams each contribute their own weight. If two teams defeat each other in different matches, connections occur in both directions. The resulting network combines all eligible results in the snapshot into one aggregate representation for each competition.
+
+This construction describes the recorded season retrospectively. It does not update rankings sequentially after each round or evaluate whether rankings available at an earlier date predict subsequent results. It also does not adjust winning margins for venue, player availability or the number of possessions.
+
+### Eigenvector centrality and concentration
+
+Eigenvector centrality gives each team a score that depends on the scores of the teams pointing towards it. With edges directed from losers to winners, a team receives weighted contributions from the opponents it defeated. Those opponents' centralities depend recursively on their own results. The measure therefore summarises a team's position within the wider pattern of recorded wins and margins, rather than considering its victories independently [@bonacich1972; @keener1993].
+
+Let $A_{ji}$ denote the sum of winning margins from matches in which team $i$ defeated team $j$. The centrality score $c_i$ satisfies
+
+$$
+\lambda c_i = \sum_j A_{ji}c_j,
+$$ {#eq-eigen}
+
+where $\lambda$ is the corresponding eigenvalue. Scores are scaled so that the highest-scoring team in each competition has a value of one. This scaling supports comparison of relative positions within a competition. A score of 0.5 should not be interpreted as half the playing ability of the leading team, and scores are not official ladder positions or estimated win probabilities.
+
+The Gini coefficient summarises inequality in these centrality scores. A larger Gini indicates that the computed scores are distributed more unevenly across teams. Its interpretation depends on the network construction: winning margins, repeated meetings, schedule differences and connectivity can all influence the distribution. The comparison is therefore a descriptive summary of results-network concentration, rather than a complete assessment of competitive balance.
 
 Software is listed in Appendix A.
 
@@ -373,7 +449,6 @@ pair_show <- bind_rows(top5, bot5) |>
 kable(pair_show, digits = 2, booktabs = TRUE, align = "lrrrrrlr")
 ```
 
-
 ```{r}
 #| label: fig-pairs
 #| fig-cap: "Connection scores for the five highest and five lowest pairs. Bars are net points per minute above model prediction; colour shows leave-one-game-out stability. Pairs share at least 15 minutes across at least two games."
@@ -393,48 +468,65 @@ ggplot(plot_df, aes(connection_score, label, fill = stability)) +
   labs(x = "Connection score (net points per minute above prediction)", y = NULL) +
   theme(legend.position = "bottom")
 ```
+
 \clearpage
+
+## Sensitivity of the pair scores
+
+The number of eligible pairs was `r n_pairs_min(10)` at ten shared minutes, `r n_pairs_min(15)` at fifteen and `r n_pairs_min(20)` at twenty (@tbl-sens). Under `lambda.1se`, the scores of pairs eligible at more than one threshold were unchanged by construction.
+
+Using `lambda.min` instead of `lambda.1se`, Spearman correlations with the main scores ranged from `r fmt(min(sens_lmin$spearman, na.rm = TRUE), 3)` to `r fmt(max(sens_lmin$spearman, na.rm = TRUE), 3)`, and between `r fmt(min(100 * sens_lmin$sign_agree, na.rm = TRUE), 1)`% and `r fmt(max(100 * sens_lmin$sign_agree, na.rm = TRUE), 1)`% of common pairs kept the same sign. Rankings were therefore closely aligned under the two penalty rules, although a small number of signs changed. This does not establish robustness to incomplete coverage, lineup errors or future games.
+
+```{r}
+#| label: tbl-sens
+#| tbl-cap: "Pair-score sensitivity relative to the main specification: lambda.1se, 15 shared minutes and at least two games. Agreement is calculated among common eligible pairs."
+sens |>
+  transmute(
+    Penalty = lambda_choice,
+    `Minimum minutes` = min_minutes,
+    Pairs = n_pairs,
+    `Common pairs` = n_shared,
+    Spearman = spearman,
+    `Same sign (%)` = 100 * sign_agree
+  ) |>
+  kable(digits = 3, booktabs = TRUE, align = "lrrrrr")
+```
 
 ## Connections within individual games
 
-For @fig-games, the same season-model residuals are averaged within each pair and game. These scores are descriptive and in-sample. They do not use the held-out prediction procedure. A two-minute within-game display threshold is used; this is not a reliability guarantee. Nodes and colours are consistent across panels; a missing edge indicates insufficient displayed exposure, not a score of zero.
-
+For @fig-games, the same season-model residuals are averaged within each pair and game. These scores are descriptive and in-sample. They do not use the held-out prediction procedure. A two-minute within-game display threshold is used; this is not a reliability guarantee. Nodes and colours are consistent across panels, and a missing edge indicates insufficient displayed exposure, not a score of zero. Game panel numbers follow fixture-ID order and are not necessarily chronological.
 
 ```{r}
 #| label: fig-games
-#| fig-cap: "Pair scores by game using a common season-model baseline. Nodes are repeated in every panel, including players who did not play. Node size is season minutes."
+#| fig-cap: "Pair scores by game using a common season-model baseline. Nodes are repeated in every panel, including players who did not play. Node size is season minutes. Players are anonymised."
 #| fig-pos: H
 #| fig-align: center
-#| out-width: "90%"
+#| out-width: 90%
 knitr::include_graphics(
   file.path("..", "Figures", "LTU_connection_network_by_game.png")
 )
 ```
 
-
-
 ## Connection network and rotation structure
+
 The connection-score network in @fig-network contains eligible adjusted pair scores. It differs from the usage network used to calculate centrality: the latter uses a threshold of one shared minute in one game, rather than 15 minutes in two games.
 
 ```{r}
 #| label: fig-network
 #| fig-cap: "Network of pairs with a connection score. Nodes are players (size is total minutes), edge width is shared minutes, and edge colour shows the connection score (blue positive, red negative). Players are anonymised."
 #| out-width: 100%
-
 knitr::include_graphics(
   file.path("..", "Figures", "LTU_connection_network_presentation.png")
 )
 ```
 
+In the shared-minute usage network, `r net$n_edges` of `r choose(net$n_players, 2)` possible pairs shared the court (density `r fmt(net$network_density, 3)`; @tbl-network). Shared-minute exposure was spread fairly evenly (Gini `r fmt(net$strength_gini)`), whereas weighted betweenness was highly concentrated (Gini `r fmt(net$weighted_betweenness_gini)`): `r n_zero_btw` of `r net$n_players` players had a betweenness of zero (@fig-betweenness).
 
-In the shared-minute usage network, `r net$n_edges`of`r choose(net$n_players, 2)` possible pairs shared the court (density `r fmt(net$network_density,3)`; @tbl-network). Shared-minute exposure was spread fairly evenly (Gini `r fmt(net$strength_gini)`), whereas weighted betweenness was highly concentrated (Gini `r fmt(net$weighted_betweenness_gini)`):`r n_zero_btw`of`r net$n_players` players had a betweenness of zero (@fig-betweenness). 
-
-The two highest bridging scores belong to `r top_btw$player_name[1]`(`r fmt(top_btw$weighted_betweenness[1])`) and `r top_btw$player_name[2]`(`r fmt(top_btw$weighted_betweenness[2])`). They rank `r top_btw$strength_rank[1]`and`r top_btw$strength_rank[2]` of `r net$n_players`for shared minutes, so the pattern is consistent with heavy exposure. Betweenness is not simply a function of minutes, however:`r second_str$player_name`, second for shared minutes, has a betweenness of `r fmt(second_str$weighted_betweenness)`. The pattern describes deployment and does not establish tactical leadership.
+The two highest bridging scores belong to `r top_btw$player_name[1]` (`r fmt(top_btw$weighted_betweenness[1])`) and `r top_btw$player_name[2]` (`r fmt(top_btw$weighted_betweenness[2])`). They rank `r ordinal(top_btw$strength_rank[1])` and `r ordinal(top_btw$strength_rank[2])` of `r net$n_players` for shared minutes, so the pattern is consistent with heavy exposure. Betweenness is not simply a function of minutes, however: `r second_str$player_name`, second for shared minutes, has a betweenness of `r fmt(second_str$weighted_betweenness)`. The pattern describes deployment and does not establish tactical leadership.
 
 ```{r}
 #| label: tbl-network
 #| tbl-cap: "Usage-network summary (pairs with at least one shared minute)."
-
 net_tbl <- tibble(
   Measure = c(
     "Players",
@@ -455,7 +547,6 @@ net_tbl <- tibble(
     fmt(net$freeman_betweenness_centralisation, 3)
   )
 )
-
 kable(net_tbl, booktabs = TRUE, align = "lr")
 ```
 
@@ -472,11 +563,9 @@ ggplot(cent, aes(weighted_betweenness, reorder(player_name, weighted_betweenness
   labs(x = "Weighted betweenness", y = NULL)
 ```
 
-
 ## Situational coverage
 
 LTU spent `r share_of("Leading by 6+")`% of observed minutes leading by at least six points, `r share_of("Within 5 points")`% within five points and `r share_of("Trailing by 6+")`% trailing by at least six (@fig-state). Trailing situations appeared in only `r ss$n_games[ss$score_state == "Trailing by 6+"]` of the retained games. The clutch window contained `r clutch$n_stints` stints totalling `r fmt(clutch$total_minutes, 1)` minutes across `r clutch$n_games` games. Only `r n_adequate` lineup-by-situation combinations reached five minutes across two games. This is too little to compare closing lineups, so the situational results are descriptive.
-
 
 ```{r}
 #| label: fig-state
@@ -493,11 +582,12 @@ ss |>
   scale_fill_manual(values = c(col_second, col_data, col_accent)) +
   labs(x = NULL, y = "Share of LTU minutes")
 ```
+
 \clearpage
 
 ## Predictive performance
 
-Across `r po$n_stints` held-out stints, the pair adjustment slightly reduced weighted RMSE from `r fmt(po$rmse_baseline, 3)` to `r fmt(po$rmse_enhanced, 3)` (@tbl-pred). The adjustment lowered error in `r sum(pg$improved)` of `r nrow(pg)` held-out games (@fig-pred). The weighted correlation between the pair feature and the baseline residuals was `r fmt(wcor, 3)`. However, the overall improvement was small, and the exploratory permutation test provided no clear evidence of a predictive advantage (p = `r fmt(perm$permutation_p, 3)`). These findings apply to the tested average-pair adjustment and do not establish that all models of player interactions would fail.
+Across `r po$n_stints` held-out stints, weighted RMSE was `r fmt(po$rmse_baseline, 3)` for the baseline model and `r fmt(po$rmse_enhanced, 3)` with the pair adjustment (difference `r fmt(rmse_diff, 3)`; positive values favour the adjustment; @tbl-pred). The adjustment lowered error in `r sum(pg$improved)` of `r nrow(pg)` held-out games (@fig-pred). The weighted correlation between the pair feature and the baseline residuals was `r fmt(wcor, 3)`. The overall difference was small, and the exploratory permutation test provided no clear evidence of a predictive advantage (p = `r fmt(perm$permutation_p, 3)`). These findings apply to the tested average-pair adjustment and do not establish that all models of player interactions would fail.
 
 ```{r}
 #| label: tbl-pred
@@ -512,17 +602,17 @@ overall_row <- tibble(Game = "All", Stints = po$n_stints, Baseline = po$rmse_bas
                       `With pair scores` = po$rmse_enhanced,
                       Difference = po$rmse_baseline - po$rmse_enhanced,
                       Improved = sprintf("%d of %d", sum(pg$improved), nrow(pg)))
-kable(bind_rows(pred_tbl, overall_row), digits = 3, booktabs = TRUE, align = "lrrrrrl")
+kable(bind_rows(pred_tbl, overall_row), digits = 3, booktabs = TRUE, align = "lrrrrl")
 ```
 
 ```{r}
 #| label: fig-pred
-#| fig-cap: "Held-out prediction error by game. Points left of the grey point (lower error) mean the pair scores helped in that game."
+#| fig-cap: "Held-out prediction error by game. A point to the left of the grey point (lower error) means the pair scores helped in that game."
 #| fig-width: 6
 #| fig-height: 3
 #| out-width: 80%
 pg |>
-  mutate(game = factor(game, levels = glab$game))|>
+  mutate(game = factor(game, levels = glab$game)) |>
   ggplot(aes(y = game)) +
   geom_segment(aes(x = rmse_baseline, xend = rmse_enhanced, yend = game), colour = "grey70") +
   geom_point(aes(x = rmse_baseline, colour = "Baseline"), size = 2.5) +
@@ -536,50 +626,63 @@ pg |>
 
 # Discussion
 
-The analysis distinguishes descriptive pair performance, rotation structure and predictive usefulness. Above-prediction shared minutes identify combinations that may warrant further investigation, but overlapping lineups prevent attributing those residuals to a particular pair. Leave-one-game-out stability adds evidence about sensitivity to the observed games, while held-out prediction asks whether the information transfers to an omitted game. These are different forms of validation, and only the second looks beyond the games used to estimate the scores.
+## Findings in relation to the objectives
 
-The lack of predictive improvement limits claims that the pair scores identify repeatable advantages. The strong coefficient shrinkage of the individual ratings reflects the influence of regularisation in this design; it does not mean players have equal ability, nor that the model has isolated their contributions. The network results are descriptive: the rotation was broadly connected, and bridging positions sat with heavily used players.
+**Lineup reconstruction (Objective 1).** The reconstruction produced usable stints for `r n_retained` of `r n_available` games (@tbl-audit). The coverage and scoring checks show internal consistency in most retained games, but they cannot verify player identities, and the excluded games show that opening-lineup inference can fail. The pair and network results therefore depend on lineups that are inferred rather than observed.
 
-For coaches, the most defensible use is targeted video review. The pair table can point to stretches in which to examine spacing, defensive coverage and the contribution of the other three players. The usage network can describe which players link rotation groups, without assigning tactical leadership from centrality alone. The results give no basis for changing rotations on predictive grounds.
+**Pair performance (Objective 2).** @tbl-pairs and @fig-pairs identify combinations whose shared stints were above or below the model's prediction. The highest score belongs to `r top5$player_1[1]` and `r top5$player_2[1]` (`r fmt(top5$connection_score[1])` net points per minute above prediction over `r fmt(top5$minutes_together[1], 0)` shared minutes and `r top5$n_games_together[1]` games), and `r star_player` appears in `r star_n` of the five highest-scoring pairs. These are candidates for review, not demonstrated partnerships: the extremes were selected from `r n_pairs` pairs, and each stint's residual is credited to ten overlapping pairs. The Spearman correlation between pair scores and the average of the two players' mean residuals was `r fmt(rho_pair_player, 3)`. Because both summaries use the same stint residuals, this overlap shows how difficult it is to separate player-associated performance from pair-specific interaction; it does not quantify how much of a pair's score is attributable to one player.
 
+**Rotation structure (Objective 3).** The usage network was almost complete (@tbl-network), so the rotation was broadly connected, and bridging positions were concentrated in two heavily used players (@fig-betweenness). Because their shared-minute rankings were `r ordinal(top_btw$strength_rank[1])` and `r ordinal(top_btw$strength_rank[2])`, the pattern is consistent with exposure, although betweenness is not simply a function of minutes. Situational coverage was thin (@fig-state): the clutch window contained only `r fmt(clutch$total_minutes, 1)` minutes, so no closing lineup can be recommended.
+
+**Validation (Objective 4).** The stability labels and the sensitivity checks (@tbl-sens) show how far the descriptive ranking depends on individual games and analyst choices. They do not show repeatability. The held-out test addresses that question directly, and the pair adjustment did not clearly improve prediction (@tbl-pred and @fig-pred). Possible reasons include the small number of games, the noisy per-minute outcome, the fixed-coefficient form of the adjustment and the unavailable opponent term for most held-out games. The data cannot separate these explanations.
+
+**League context (Objective 5).** The league networks (Appendix B) show that team strength was concentrated in both competitions and that the leading women's team was not the leading men's team. This is descriptive context for one season; it does not validate the player-pair scores.
+
+## Implications for coaching practice
+
+For coaches, the most defensible use is targeted video review. The pair table can point to stretches in which to examine spacing, defensive coverage and the contribution of the other three players. The usage network can describe which players link rotation groups, without assigning tactical leadership from centrality alone. The results give no basis for changing rotations on predictive grounds. The main significance of the work is methodological and practical: it shows how play-by-play data can be turned into reviewable evidence for a small team, and it demonstrates the value of testing such evidence on games it was not estimated from.
 
 ## Limitations
 
 - **Sample:** one season, one team's perspective, and `r n_retained` retained games. Excluded games also remove data, and a coverage screen of 50% is permissive.
-- **Lineup reconstruction:** opening lineups are inferred, and lineups are carried between periods without independent verification between periods.
+- **Lineup reconstruction:** opening lineups are inferred, and lineups are carried between periods without independent verification.
 - **Outcome measure:** performance is per minute rather than per possession, so pace differences remain, and short stints give noisy rates.
 - **Controls:** the opponent control is team-level and regularised, and most opponents appear in only one retained game. Score state is not in the baseline model.
 - **Interpretation:** a pair's residual can reflect the contributions of the other three players or game circumstances. Many overlapping pairs create opportunities for extreme rankings by chance, and residuals are in-sample.
-- **Validation:** stability labels reuse overlapping games, and the permutation benchmark ignores within-game dependence.
+- **Validation:** stability labels reuse overlapping games, the sensitivity checks vary only a few settings, and the permutation benchmark ignores within-game dependence.
+- **League analysis:** one season, with margin-weighted results and different schedules across competitions.
 
 ## Future work
 
-Future work should prioritise verified lineups and archived source data, then more games and accessible seasons of 2026. Useful sensitivity checks include stricter coverage rules, alternative stint and pair-exposure thresholds, and a comparison of `lambda.1se` with `lambda.min`. A larger dataset could support possession-adjusted outcomes, controls for opposing lineups and a pair adjustment calibrated within each training fold. A temporal split would better assess prediction of future games than leave-one-game-out within a season.
+Future work should prioritise verified lineups and archived source data, then additional games and seasons (for example 2026, if available). Useful additional checks include stricter coverage rules, other stint thresholds and the exclusion of partially covered games. A larger dataset could support possession-adjusted outcomes, controls for opposing lineups and a pair adjustment calibrated within each training fold. A temporal split would better assess prediction of future games than leave-one-game-out validation within a season.
 
 \clearpage
 
 # Conclusion
 
-This project develops a workflow for examining player connections and rotation structure in LTU women's basketball. The pair scores identify combinations for further observation, and the usage network describes broad player overlap with concentrated bridging positions. However, the tested pair-score adjustment did not clearly improve held-out prediction.
+This project developed a workflow for examining player connections and rotation structure in LTU women's basketball. Of `r n_pairs` eligible pairs, `r stab[["Stable positive"]]` had stable positive and `r stab[["Stable negative"]]` stable negative connection scores, and `r star_player` appeared in `r star_n` of the five highest-scoring pairs. The usage network showed broad player overlap with concentrated bridging positions, and the league networks showed concentrated team strength in both competitions. However, the tested pair-score adjustment did not clearly improve held-out prediction.
 
-The practical recommendation is to use these results to prioritise video review and data collection. More verified games, and evidence that patterns repeat, are needed before using the scores to recommend changes to rotations.
-
+The practical recommendation is to use these results to prioritise video review and data collection. The main limitations are the small single-season sample, inferred lineups and per-minute outcomes. More verified games, and evidence that patterns repeat, are needed before using the scores to recommend changes to rotations.
 
 \clearpage
 
 # Appendix A: Software and reproducibility {.unnumbered}
 
-Analyses were run in R [@rcore] using the tidyverse [@wickham2019], `glmnet` [@friedman2010] and `igraph` [@csardi2006]. The runner, `run-analysis.R`, executes four scripts in order: `R/LTU-team.R` loads saved inputs, reconstructs stints and calculates connection scores and situational summaries; `R/LTU-prediction.R` evaluates held-out predictions; `R/LTU-network-by-game.R` produces per-game networks; and `R/LTU-league-comparison.R` calculates league-level centrality scores.
+Analyses were run in R [@rcore] (<https://www.R-project.org/>) using the tidyverse [@wickham2019] (<https://www.tidyverse.org/>), `glmnet` [@friedman2010] (<https://CRAN.R-project.org/package=glmnet>) and `igraph` [@csardi2006] (<https://igraph.org/r/>). Figures used `ggplot2` and `ggraph` (<https://CRAN.R-project.org/package=ggraph>), and this report was rendered with Quarto (<https://quarto.org/>).
 
-The report is rendered separately and reads saved outputs and input snapshots without downloading new data. Player labels are used in all tables and figures displayed in the report.
+The runner, `run-analysis.R`, executes four scripts in order: `R/LTU-team.R` loads saved inputs, reconstructs stints and calculates connection scores and situational summaries; `R/LTU-prediction.R` evaluates held-out predictions; `R/LTU-network-by-game.R` produces per-game networks; and `R/LTU-league-comparison.R` calculates league-level centrality scores. The sensitivity and diagnostic tables read by this report are also saved to `outputs/tables/`. Random seeds are set in the runner and the model code.
+
+The report is rendered separately from the repository's `report/` folder. It reads saved outputs and the input snapshot without downloading new data. Report tables and figures use anonymous player labels; `data/DATA.md` describes what the saved inputs contain and the conditions for sharing them. Instructions for rerunning the analysis are in `README.md`; optional refresh instructions are in `data/DATA.md`. An optional interactive version of the connection network (using `visNetwork`) is created by the team script when that package is installed; the report uses static figures.
 
 \clearpage
 
 # Appendix B: League context {.unnumbered}
 
-For context, a team-level network was built from all UBL results in 2025 competition. Each match adds an arrow from the losing team to the winning team, weighted by winning margin, and eigenvector centrality ranks teams so that wins over highly ranked teams count for more [@keener1993; @bonacich1972]. Scores are scaled so the top team equals 1. The Gini coefficient summarises how concentrated these scores are.
+For context, a team-level network was built from all UBL results in each 2025 competition. Each match adds an arrow from the losing team to the winning team, weighted by winning margin, and eigenvector centrality ranks teams so that wins over highly ranked teams count for more [@keener1993; @bonacich1972]. Scores are scaled so the top team equals 1, and the Gini coefficient summarises how concentrated these scores are.
 
-In the women's competition `r women$team[1]` ranked first and LTU ranked `r which(women$team == "LTU")` of `r nrow(women)` (Gini `r fmt(gini_w)`). In the men's competition `r men$team[1]` ranked first (Gini `r fmt(gini_m)`) and `r women$team[1]` ranked `r which(men$team == women$team[1])`, so team strength was specific to each competition (@fig-league). This is one season, and the measure rewards winning margins as well as wins.
+The women's network contains `r nrow(women)` teams and the men's network contains `r nrow(men)`. In the women's competition `r women$team[1]` ranked first and LTU ranked `r ordinal(which(women$team == "LTU"))` (Gini `r fmt(gini_w, 3)`). In the men's competition `r men$team[1]` ranked first and `r women$team[1]` ranked `r ordinal(which(men$team == women$team[1]))` (Gini `r fmt(gini_m, 3)`), so team strength was specific to each competition (@fig-league).
+
+The men's scores were `r conc_word` concentrated than the women's under this network definition. This describes inequality in the calculated centralities; it does not establish which competition was more competitive overall. The comparison incorporates winning margins and the pattern of opponents, and it may also reflect differences in schedules and network connectivity. Separate scaling within each competition means that a women's team and a men's team with the same score do not necessarily have equivalent playing strength. Women's and men's squads also contain different players, so the university name alone does not determine network position across competitions. These rankings provide descriptive league context; they do not establish a causal explanation for team success.
 
 ```{r}
 #| label: fig-league
@@ -604,7 +707,6 @@ ggplot(league, aes(eigenvector_centralization, team_key, fill = team == "LTU")) 
 
 ::: {#refs}
 :::
-
 
 ## AI Acknowledgement {.unnumbered}
 

@@ -1407,6 +1407,87 @@ print(final_pair_table %>% count(stability))
 # This model is reused by the game-level visualisation and report snapshot.
 season_model <- attr(ltu_connection, "rapm_model")
 
+
+# Compare pair scores with player-level mean residuals.
+player_resid <- season_model$stint_predictions |>
+  select(lineup, duration_sec, stint_residual) |>
+  tidyr::unnest_longer(lineup) |>
+  mutate(personId = as.character(lineup)) |>
+  group_by(personId) |>
+  summarise(
+    mean_resid = weighted.mean(
+      stint_residual,
+      duration_sec
+    ),
+    .groups = "drop"
+  )
+
+pair_vs_player <- ltu_connection |>
+  mutate(across(c(id_1, id_2), as.character)) |>
+  left_join(
+    player_resid |>
+      transmute(id_1 = personId, r1 = mean_resid),
+    by = "id_1"
+  ) |>
+  left_join(
+    player_resid |>
+      transmute(id_2 = personId, r2 = mean_resid),
+    by = "id_2"
+  ) |>
+  mutate(mean_player_residual = (r1 + r2) / 2)
+
+stopifnot(
+  !anyNA(pair_vs_player$r1),
+  !anyNA(pair_vs_player$r2)
+)
+
+pair_player_rho <- cor(
+  pair_vs_player$connection_score,
+  pair_vs_player$mean_player_residual,
+  method = "spearman"
+)
+
+print(pair_player_rho)
+
+# Sensitivity to penalty selection and pair exposure
+sens_grid <- tidyr::expand_grid(
+  lambda_choice = c("lambda.1se", "lambda.min"),
+  min_minutes = c(10, 15, 20)
+)
+
+sensitivity <- purrr::pmap_dfr(
+  sens_grid,
+  function(lambda_choice, min_minutes) {
+    sc <- compute_connection_scores(
+      stints_df_clean,
+      ltu_settings$team,
+      player_lookup,
+      min_minutes = min_minutes,
+      min_games = ltu_settings$min_pair_games,
+      lambda_choice = lambda_choice
+    )
+    
+    j <- inner_join(
+      ltu_connection |>
+        select(id_1, id_2, base = connection_score),
+      sc |>
+        select(id_1, id_2, alt = connection_score),
+      by = c("id_1", "id_2")
+    )
+    
+    tibble(
+      lambda_choice,
+      min_minutes,
+      n_pairs = nrow(sc),
+      n_shared = nrow(j),
+      spearman = cor(j$base, j$alt, method = "spearman"),
+      sign_agree = mean(sign(j$base) == sign(j$alt))
+    )
+  }
+)
+
+print(sensitivity)
+
 # 13. Summarise player minutes and selected pairs ----
 
 ltu_minutes <- compute_player_minutes(stints_df_clean, ltu_settings$team, player_lookup)
@@ -1444,8 +1525,6 @@ network_plot <- static_network
 static_network_presentation <- build_connection_network_plot_presentation(
   ltu_connection, ltu_minutes, player_labels
 )
-print(static_network)
-print(static_network_presentation)
 
 ggsave(
   filename = file.path(ltu_paths$figures, "LTU_connection_network.png"),
@@ -1684,4 +1763,6 @@ write_ltu_table(score_state_coverage, "LTU_score_state_coverage.csv")
 write_ltu_table(clutch_coverage, "LTU_clutch_coverage.csv")
 write_ltu_table(game_participation, "LTU_player_game_participation.csv")
 write_ltu_table(game_coverage_all, "LTU_game_coverage_all.csv")
+write_ltu_table(pair_vs_player, "LTU_pair_vs_player_residual.csv")
+write_ltu_table(sensitivity, "LTU_sensitivity.csv")
 message("Team analysis finished. Tables: outputs/tables/; plots: Figures/.")

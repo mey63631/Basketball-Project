@@ -1,0 +1,7 @@
+"lambda_choice","min_minutes","n_pairs","n_shared","spearman","sign_agree"
+"lambda.1se",10,85,73,1,1
+"lambda.1se",15,73,73,1,1
+"lambda.1se",20,56,56,1,1
+"lambda.min",10,85,73,0.998858447488584,0.972602739726027
+"lambda.min",15,73,73,0.998858447488584,0.972602739726027
+"lambda.min",20,56,56,0.998154477101845,0.964285714285714
