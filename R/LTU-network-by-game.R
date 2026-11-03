@@ -116,11 +116,94 @@ print(game_network_plot)
 
 # 5. Save the figure and game-level values ----
 
-ggsave(
-  filename = file.path(ltu_paths$figures, "LTU_connection_network_by_game.png"),
-  plot = game_network_plot,
-  width = 14, height = 4 * ceiling(nrow(game_key) / 2),
-  dpi = 300, bg = "white"
+game_groups <- split(
+  game_key$game,
+  ceiling(seq_len(nrow(game_key)) / 4)
 )
+
+shared_limits <- range(edges$minutes_together, na.rm = TRUE)
+minutes_limits <- range(nodes$total_minutes, na.rm = TRUE)
+
+for (i in seq_along(game_groups)) {
+  
+  page_edges <- edges |>
+    filter(as.character(game) %in% game_groups[[i]]) |>
+    mutate(
+      game = factor(as.character(game), levels = game_groups[[i]])
+    )
+  
+  page_graph <- graph_from_data_frame(
+    page_edges,
+    directed = FALSE,
+    vertices = nodes
+  )
+  
+  # Reuse the original coordinates by player ID.
+  positions <- match(V(page_graph)$name, game_layout$name)
+  
+  page_layout <- create_layout(
+    page_graph,
+    layout = "manual",
+    x = game_layout$x[positions],
+    y = game_layout$y[positions]
+  )
+  
+  set.seed(123)
+  
+  page_plot <- ggraph(page_layout) +
+    geom_edge_link(
+      aes(width = minutes_together, colour = connection_score),
+      alpha = 0.65
+    ) +
+    geom_node_point(
+      aes(size = total_minutes),
+      colour = "grey25"
+    ) +
+    geom_node_text(
+      aes(label = player_name),
+      repel = TRUE,
+      size = 3.2
+    ) +
+    scale_edge_width(
+      range = c(0.3, 2),
+      limits = shared_limits,
+      name = "Game shared minutes"
+    ) +
+    scale_edge_colour_gradient2(
+      low = "firebrick",
+      mid = "grey85",
+      high = "steelblue",
+      midpoint = 0,
+      limits = c(-colour_limit, colour_limit),
+      name = "Connection score"
+    ) +
+    scale_size_continuous(
+      range = c(2, 5),
+      limits = minutes_limits,
+      name = "Season minutes"
+    ) +
+    facet_edges(~ game, ncol = 2, drop = TRUE) +
+    theme_void(base_size = 11) +
+    theme(
+      strip.text = element_text(face = "bold", size = 12),
+      legend.position = "bottom",
+      legend.box = "vertical",
+      plot.margin = margin(15, 20, 15, 20)
+    )
+  
+  ggsave(
+    filename = file.path(
+      ltu_paths$figures,
+      paste0("LTU_connection_network_by_game_page", i, ".png")
+    ),
+    plot = page_plot,
+    width = 9,
+    height = 10,
+    units = "in",
+    dpi = 300,
+    bg = "white"
+  )
+}
+
 write_ltu_table(game_pair_scores, "LTU_connection_scores_by_game.csv")
 write_ltu_table(game_key, "LTU_game_labels.csv")
