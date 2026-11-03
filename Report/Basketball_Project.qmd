@@ -27,21 +27,11 @@ knitr:
 execute:
   message: false
   warning: false
-geometry:
-  - top=2.4cm
-  - bottom=2.4cm
-  - left=2.5cm
-  - right=2.5cm
-  - includeheadfoot
-  - headheight=17pt
-  - footskip=1cm
 ---
 
 \pagenumbering{roman}
 
 \setcounter{tocdepth}{2}
-\phantomsection
-\addcontentsline{toc}{section}{Table of contents}
 \begingroup
 \singlespacing
 \tableofcontents
@@ -176,7 +166,7 @@ gini_m <- gini_coefficient(men$eigenvector_centralization)
 conc_word <- ifelse(gini_m > gini_w, "more", "less")
 ```
 
-# Abstract {.unnumbered}
+# Abstract 
 
 Coaches substitute players constantly, but individual statistics such as points and plus-minus cannot show which combinations work well together, because a player's results also depend on her teammates, her opponents and her playing time. This project examines player-pair performance and rotation structure in La Trobe University's (LTU) women's team in the 2025 University Basketball League (UBL). Event-level play-by-play data were used to reconstruct five-player lineups and same-lineup intervals ("stints") for `r n_retained` of `r n_available` games.
 
