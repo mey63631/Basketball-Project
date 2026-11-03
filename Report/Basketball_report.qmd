@@ -428,7 +428,7 @@ Software is listed in Appendix A.
 
 ## Pair performance and stability
 
-@tbl-pairs and @fig-pairs show the highest and lowest connection scores. Of the `r n_pairs` eligible pairs, `r stab[["Stable positive"]]` were stable positive, `r stab[["Stable negative"]]` were stable negative, `r stab[["Uncertain"]]` were uncertain, and `r stab[["Insufficient stability evidence"]]` had insufficient evidence. Scores ranged from `r fmt(min(pair_tbl$connection_score))` to `r fmt(max(pair_tbl$connection_score))` net points per minute relative to prediction. `r star_player` appears in `r star_n` of the five highest-scoring pairs. The model's individual ratings were small, ranging from `r fmt(min(ratings$rapm_rating), 3)` to `r fmt(max(ratings$rapm_rating), 3)`, which is consistent with strong shrinkage.
+@tbl-pairs and @fig-pairs show the highest and lowest connection scores. Of the `r n_pairs` eligible pairs, `r stab[["Stable positive"]]` were stable positive, `r stab[["Stable negative"]]` were stable negative, `r stab[["Uncertain"]]` were uncertain, and `r stab[["Insufficient stability evidence"]]` had insufficient evidence. Scores ranged from `r fmt(min(pair_tbl$connection_score))` to `r fmt(max(pair_tbl$connection_score))` net points per minute relative to prediction. `r star_player` appears in `r star_n` of the five highest-scoring pairs. The model's individual ratings were small, ranging from `r formatC(min(ratings$rapm_rating), format = "e", digits = 2)` to `r formatC(max(ratings$rapm_rating), format = "e", digits = 2)`, which is consistent with strong shrinkage.
 
 The extremes are selected from many pairs, so they probably overstate any real effect. The stability labels also reuse the same games, so they show sensitivity to single games rather than evidence of repeatability.
 
@@ -496,7 +496,7 @@ sens |>
 
 ## Connections within individual games
 
-For @fig-games, the same season-model residuals are averaged within each pair and game. These scores are descriptive and in-sample. They do not use the held-out prediction procedure. A two-minute within-game display threshold is used; this is not a reliability guarantee. Nodes and colours are consistent across panels, and a missing edge indicates insufficient displayed exposure, not a score of zero. Game panel numbers follow fixture-ID order and are not necessarily chronological.
+For @fig-games and @fig-games-second, the same season-model residuals are averaged within each pair and game. These scores are descriptive and in-sample. They do not use the held-out prediction procedure. A two-minute within-game display threshold is used; this is not a reliability guarantee. Nodes and colours are consistent across panels, and a missing edge indicates insufficient displayed exposure, not a score of zero. Game panel numbers follow fixture-ID order and are not necessarily chronological.
 
 
 
