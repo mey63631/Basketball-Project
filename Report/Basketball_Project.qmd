@@ -218,6 +218,18 @@ The data are play-by-play records for ten LTU games (`r n_retained` retained aft
 - **Networks and visualisation:** shared-minute networks with centrality and concentration measures, and anonymised figures for reporting.
 - **Reproducibility:** analysis scripts that run in a fixed order and save the outputs this report reads (Appendix A).
 
+## Skills developed and challenges
+
+**Data work.** A substantial part of the project involved turning event records into an analysable dataset. I worked with nested JSON responses, adapted the extraction function when the feed's response structure changed, and tracked substitutions occurring at identical timestamps. These tasks required careful attention to event ordering and to the distinction between player identifiers and display names.
+
+**Difficulties and how they were addressed.** Three difficulties shaped the analysis. First, in two games the inferred roster drifted away from five players after the first substitutions; I traced the roster size after each substitution, identified the pattern and excluded games below a coverage threshold, reporting the exclusion. Second, a data-structure error silently emptied the opponent lineups; it was found by checking lineup lengths and corrected. Third, the live feed changed during the project, so the inputs were saved as fixed snapshots and the analysis was separated from report rendering.
+
+**Analytical learning.** The reconstruction checks changed how I interpreted data quality: matching scoring totals is reassuring, but it does not show that the inferred players are correct. The modelling stage developed my understanding of regularisation, game-level cross-validation and weighted-network measures. An important lesson was that a descriptive pattern can remain visible without clearly improving held-out predictions, and that such a result should be reported rather than hidden.
+
+**Workload.** The work moved through stages that were each checked before the next: building and testing the extraction function; reconstructing and checking lineups against scoring events; fitting and validating the model; calculating network measures; and organising the code into scripts with a single runner, saved inputs and documentation so that results can be regenerated.
+
+
+
 \clearpage
 
 # Data and Preparation
